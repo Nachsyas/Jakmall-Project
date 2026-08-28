@@ -1,0 +1,57 @@
+project:
+  name: Intelligent Product Sync Platform
+  source: JakMall
+  marketplace: Shopee
+  language: id-ID
+  architecture: modular-monolith
+
+core_flow:
+  extraction: true
+  normalization: true
+  marketplace_mapping: true
+  review: true
+  marketplace_listing: true
+  verification: true
+
+source:
+  primary_strategy: static-http
+  embedded_state: spdt
+  fallback:
+    - json-ld
+    - playwright
+
+database:
+  engine: postgresql
+
+queue:
+  engine: redis-bullmq
+
+ai:
+  role: semantic-intelligence
+  business_logic_authority: false
+
+documentation:
+  documentation_as_code: true
+
+managed_files:
+  - PROJECT_MANIFEST.yaml
+  - README.md
+  - package.json
+  - tsconfig.json
+  - src/index.ts
+  - src/canonical/types.ts
+  - src/jakmall/types.ts
+  - src/jakmall/client.ts
+  - src/jakmall/parser.ts
+  - src/jakmall/normalizer.ts
+  - src/jakmall/adapter.ts
+  - tests/client.test.ts
+  - tests/parser.test.ts
+  - tests/normalizer.test.ts
+  - docs/project-status.md
+  - docs/known-limitations.md
+  - docs/source/jakmall-extraction.md
+  - docs/source/extraction-findings.md
+  - docs/product/canonical-product.md
+  - docs/product/field-ownership.md
+  - docs/architecture/system-overview.md
