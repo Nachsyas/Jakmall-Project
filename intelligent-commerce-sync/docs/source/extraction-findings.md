@@ -61,7 +61,7 @@ This document records reverse-engineering findings and extraction observations a
 ---
 
 ### Finding: FIND-008
-- **Status:** PROVEN
-- **Observation:** Inconsistent stock states exist in source data.
-- **Evidence:** If `is_limited_stock: true` but `limited_stock: null`, or `in_stock: undefined`.
-- **Engineering Impact:** Mapped to explicit `status: "unknown"` with `available: false`, never silently assumed available or zero.
+- **Status:** HYPOTHETICAL_DEFENSIVE
+- **Observation:** Inconsistent or incomplete stock states may occur in malformed source payloads.
+- **Evidence:** Defensive test cases such as `is_limited_stock: true` with `limited_stock: null`, or missing `in_stock: undefined`. (Not observed in certified real fixtures).
+- **Engineering Impact:** Mapped strictly to `available: null, exact: false, quantity: undefined, status: "unknown"`. It is never assumed available (`true`) nor confirmed out of stock (`false`), preventing silent inventory corruption.

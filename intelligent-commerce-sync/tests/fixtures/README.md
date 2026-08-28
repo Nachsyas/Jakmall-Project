@@ -14,6 +14,16 @@ Seluruh fixture di bawah ini diklasifikasikan sebagai **`SANITIZED_REAL`**: ditu
 
 ---
 
+## Authoritative Fixture SHA-256 Registry
+
+| Fixture File | Classification | Product ID | Authoritative External SHA-256 Hash |
+|---|:---:|:---:|---|
+| [tests/fixtures/acmic.html](file:///Users/user/Documents/JakMall%20Project/intelligent-commerce-sync/tests/fixtures/acmic.html) | `SANITIZED_REAL` | `6970238281488` | `087b8457fa2ea2128b7335493f62bf04037836d0355f6bb35c019760a1f76f5d` |
+| [tests/fixtures/momo.html](file:///Users/user/Documents/JakMall%20Project/intelligent-commerce-sync/tests/fixtures/momo.html) | `SANITIZED_REAL` | `7372731614335` | `93b8039c4c438d8b87ad5dc2e73f431ac8d44d209fe38b6d0e688fbb92f67742` |
+| [tests/fixtures/asv.html](file:///Users/user/Documents/JakMall%20Project/intelligent-commerce-sync/tests/fixtures/asv.html) | `SANITIZED_REAL` | `2389444540861` | `925ac2680479d0d44a605a10ff694c64c32d2b8c19aa2dc229a414f20cd4dc48` |
+
+---
+
 ## 1. ACMIC CPD65 65W GaN Fast Charger
 
 - **Klasifikasi:** `SANITIZED_REAL`
@@ -21,7 +31,7 @@ Seluruh fixture di bawah ini diklasifikasikan sebagai **`SANITIZED_REAL`**: ditu
 - **Capture Timestamp:** `2026-08-29 01:06:00 WIB`
 - **Product ID:** `6970238281488`
 - **Expected SKU Count:** 9
-- **SHA-256 Hash:** `b42c37f5c925d35fb9aa8f5208098228cd2081b1bc168bd030abb4eafafca838`
+- **SHA-256 Hash:** `087b8457fa2ea2128b7335493f62bf04037836d0355f6bb35c019760a1f76f5d`
 - **Dimension Key / Name:** `"2e35ea8e8b6fccc9ec2c813b4b661edaa535a68d"` / `"Lain-lain"`
 - **Literal Raw Source SKU Properties:**
   1. `5502951494118` (CPD65 PRO Only): `sku: null`, `sku_display: "5502951494118"`, `price.final: 379000`, `in_stock: true`, `is_limited_stock: true`, `limited_stock: 3`, `weight: 230`, `pre_order: null`
@@ -45,7 +55,7 @@ Seluruh fixture di bawah ini diklasifikasikan sebagai **`SANITIZED_REAL`**: ditu
 - **Capture Timestamp:** `2026-08-29 01:06:00 WIB`
 - **Product ID:** `7372731614335`
 - **Expected SKU Count:** 1
-- **SHA-256 Hash:** `df4cecadd017d2d10bc238a113ab5e6fcf7297770d6b1b67911226cb462da2d6`
+- **SHA-256 Hash:** `93b8039c4c438d8b87ad5dc2e73f431ac8d44d209fe38b6d0e688fbb92f67742`
 - **Source SKU ID:** `2715227285879`
 - **Merchant SKU:** `OMPKGKBK`
 - **Display SKU:** `OMPKGKBK`
@@ -65,7 +75,7 @@ Seluruh fixture di bawah ini diklasifikasikan sebagai **`SANITIZED_REAL`**: ditu
 - **Capture Timestamp:** `2026-08-29 01:06:00 WIB`
 - **Product ID:** `2389444540861`
 - **Expected SKU Count:** 6
-- **SHA-256 Hash:** `51e56d9e5fff8da71bbb99458c94d2cf7109450f8868e5f416e950c96792a84f`
+- **SHA-256 Hash:** `925ac2680479d0d44a605a10ff694c64c32d2b8c19aa2dc229a414f20cd4dc48`
 - **Dimensions:** `Ukuran` (L, XL, XXL) $\times$ `Warna` (Hitam, Biru Tua)
 - **Actual Source SKU IDs:**
   - L + Hitam $\rightarrow$ `3813346585186`

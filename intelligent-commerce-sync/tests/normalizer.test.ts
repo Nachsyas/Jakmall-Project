@@ -4,6 +4,7 @@ import {
   normalizeStock,
   resolveVariantAttributes,
   normalizeToCanonical,
+  normalizeImages,
 } from "../src/jakmall/normalizer.js";
 import type { ParsedJakmallPage, JakmallRawSkuItem } from "../src/jakmall/types.js";
 
@@ -133,4 +134,46 @@ test("normalizeToCanonical transforms ParsedJakmallPage to CanonicalProduct cont
   assert.equal(variant.inventory.quantity, 12);
   assert.equal(variant.weightGrams, 650);
   assert.equal(canonical.seller.name, "Official Outdoor Gear");
+});
+
+test("normalizeImages enforces priority: detail > thumbnail > icon", () => {
+  const images = [
+    {
+      detail: "https://img.jakmall.com/d1.jpg",
+      thumbnail: "https://img.jakmall.com/t1.jpg",
+      icon: "https://img.jakmall.com/i1.jpg",
+    },
+    {
+      thumbnail: "https://img.jakmall.com/t2.jpg",
+      icon: "https://img.jakmall.com/i2.jpg",
+    },
+    {
+      icon: "https://img.jakmall.com/i3.jpg",
+    },
+  ];
+
+  const result = normalizeImages(images);
+  assert.equal(result.length, 3);
+  assert.equal(result[0]!.url, "https://img.jakmall.com/d1.jpg", "detail must have priority over thumbnail and icon");
+  assert.equal(result[1]!.url, "https://img.jakmall.com/t2.jpg", "thumbnail must be used when detail is absent");
+  assert.equal(result[2]!.url, "https://img.jakmall.com/i3.jpg", "icon must be used when detail and thumbnail are absent");
+});
+
+test("normalizeImages deduplicates duplicate selected URLs and preserves sequential position", () => {
+  const images = [
+    { detail: "https://img.jakmall.com/pic1.jpg" },
+    { detail: "https://img.jakmall.com/pic2.jpg" },
+    { detail: "https://img.jakmall.com/pic1.jpg" }, // Duplicate
+    { thumbnail: "https://img.jakmall.com/pic2.jpg" }, // Duplicate of pic2
+    { detail: "https://img.jakmall.com/pic3.jpg" },
+  ];
+
+  const result = normalizeImages(images);
+  assert.equal(result.length, 3);
+  assert.equal(result[0]!.url, "https://img.jakmall.com/pic1.jpg");
+  assert.equal(result[0]!.position, 1);
+  assert.equal(result[1]!.url, "https://img.jakmall.com/pic2.jpg");
+  assert.equal(result[1]!.position, 2);
+  assert.equal(result[2]!.url, "https://img.jakmall.com/pic3.jpg");
+  assert.equal(result[2]!.position, 3);
 });

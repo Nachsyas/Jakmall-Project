@@ -30,13 +30,14 @@ Phase 3 Initiation: Define MarketplaceAdapter contract & Shopee Product Strategy
 
 ## AUTHORITATIVE SOURCE PROVENANCE REGISTRY
 
-| Fixture Key | Classification | Authoritative Source URL | Capture Timestamp | Product ID | Fixture SHA-256 Hash |
-|---|:---:|---|:---:|:---:|:---:|
-| `acmic.html` | `SANITIZED_REAL` | `https://www.jakmall.com/acmic-official-store/acmic-cpd65-gan-65w-super-fast-charging-65-w-charger-pd-power-adapter#5502951494118` | 2026-08-29 01:06:00 WIB | `6970238281488` | `b42c37f5c925d35fb9aa8f5208098228cd2081b1bc168bd030abb4eafafca838` |
-| `momo.html` | `SANITIZED_REAL` | `https://www.jakmall.com/shopping-mania/momo-celana-panjang-cargo-pria-tactical-waterproof-polyester-cotton-ap78#2715227285879` | 2026-08-29 01:06:00 WIB | `7372731614335` | `df4cecadd017d2d10bc238a113ab5e6fcf7297770d6b1b67911226cb462da2d6` |
-| `asv.html` | `SANITIZED_REAL` | `https://www.jakmall.com/lstore/jas-hujan-asv-versi-1-kualitas-no1-rubber-press#3813346585186` | 2026-08-29 01:06:00 WIB | `2389444540861` | `51e56d9e5fff8da71bbb99458c94d2cf7109450f8868e5f416e950c96792a84f` |
+| Fixture Key | Classification | Authoritative Source URL | Capture Timestamp | Product ID | Authoritative External SHA-256 Hash |
+|---|:---:|---|:---:|:---:|---|
+| `acmic.html` | `SANITIZED_REAL` | `https://www.jakmall.com/acmic-official-store/acmic-cpd65-gan-65w-super-fast-charging-65-w-charger-pd-power-adapter#5502951494118` | 2026-08-29 01:06:00 WIB | `6970238281488` | `087b8457fa2ea2128b7335493f62bf04037836d0355f6bb35c019760a1f76f5d` |
+| `momo.html` | `SANITIZED_REAL` | `https://www.jakmall.com/shopping-mania/momo-celana-panjang-cargo-pria-tactical-waterproof-polyester-cotton-ap78#2715227285879` | 2026-08-29 01:06:00 WIB | `7372731614335` | `93b8039c4c438d8b87ad5dc2e73f431ac8d44d209fe38b6d0e688fbb92f67742` |
+| `asv.html` | `SANITIZED_REAL` | `https://www.jakmall.com/lstore/jas-hujan-asv-versi-1-kualitas-no1-rubber-press#3813346585186` | 2026-08-29 01:06:00 WIB | `2389444540861` | `925ac2680479d0d44a605a10ff694c64c32d2b8c19aa2dc229a414f20cd4dc48` |
 
 - **Sanitization Boundary:** Only session cookies, CSRF tokens, cart sync state, third-party analytics pixels (Facebook Pixel, Hotjar), and global site header/footer chrome were removed.
+- **External Hash Rule:** Whole-file hashes live strictly externally in `tests/fixtures/README.md` and this registry; no self-referential hash comments exist inside the fixture files.
 - **Acceptance-Critical Value Integrity:** All product IDs, SKU IDs, merchant SKUs, display SKUs, variant names, matrix structures, prices, stock flags, limited_stock values, weights, and image links were directly preserved from literal raw captured JakMall HTML/SPDT state without modification or reconstruction.
 
 ---
@@ -56,14 +57,22 @@ Phase 3 Initiation: Define MarketplaceAdapter contract & Shopee Product Strategy
    - Removed artificial labels like `CPD65-PRO`. In raw JakMall SPDT, `sku_display` is equal to the numeric SKU string ID (e.g. `"5502951494118"`).
 4. **Unknown Stock Policy Rule:**
    - `available = true, exact = false, quantity = undefined` represents that source confirms availability but does not disclose quantity. Phase 2 preserves this source truth only. It is **NOT** automatically treated as marketplace-publishable without a downstream safety stock policy or review gate.
+5. **Zero-Any Type Safety Verification:**
+   - Replaced all explicit `as any` casts in `src/jakmall/normalizer.ts` and `src/jakmall/parser.ts` with type guards (`isRecord`), safe field accessors, and `Record<string, unknown>`.
+   - Verified 0 explicit `any` occurrences across entire `src/` directory.
+6. **Full Namespaced JSON-LD Support:**
+   - Added support for both plain and namespaced schema.org forms (`@type: Product`, `@type: http://schema.org/Product`, `http://schema.org/offers`, `http://schema.org/price`, etc.).
+   - Added unit test coverage for `Offer`, `AggregateOffer` with `lowPrice`, `AggregateOffer` with nested `offers[]`, and non-positive price rejection.
+7. **Image Testing Coverage:**
+   - Added dedicated unit tests for `normalizeImages()` verifying detail > thumbnail > icon priority, fallback chain, URL deduplication, and sequential position ordering.
 
 ---
 
 ## POST-REPAIR VALIDATION (AUTHENTIC FIXTURES)
 
-- **Date:** 2026-08-29 01:08:47 WIB
-- **`npm test`:** PASS (15 tests passed across 4 suites, 0 failed, duration: 517ms)
-- **`npm run typecheck`:** PASS (0 TypeScript errors, 100% type-safe, 0 `any`)
+- **Date:** 2026-08-29 01:43:15 WIB
+- **`npm test`:** PASS (21 tests, 0 suites, 0 failed, duration: 486ms)
+- **`npm run typecheck`:** PASS (0 TypeScript errors, 100% type-safe, 0 explicit `any`)
 - **Diagnostic Tool Runs:**
   - `acmic.html` -> PASS (9 SKUs, literal prices 379k/449k/299k/399k, literal stock 3 active & 8 OOS)
   - `momo.html` -> PASS (Product ID `7372731614335`, Price `119400`, weight 800g, XL+Hitam)
@@ -93,8 +102,8 @@ Phase 3 Initiation: Define MarketplaceAdapter contract & Shopee Product Strategy
 
 | # | Acceptance Gate Condition | Status | Evidence |
 |---|---------------------------|:------:|----------|
-| 1 | `npm run typecheck` passes | PASS | 0 errors (`tsc --noEmit`) |
-| 2 | `npm test` passes | PASS | 15/15 tests pass (517ms) |
+| 1 | `npm run typecheck` passes | PASS | 0 errors (`tsc --noEmit`), 0 explicit `any` in `src/` |
+| 2 | `npm test` passes | PASS | 21/21 tests pass across test runner (486ms) |
 | 3 | ACMIC fixture passes | PASS | `tests/regression.test.ts` (exact 9 source SKU IDs, literal prices & stock) |
 | 4 | MOMO fixture passes | PASS | `tests/regression.test.ts` (SKU `2715227285879`, `OMPKGKBK`, ID `7372731614335`, Price `119400`) |
 | 5 | ASV fixture passes | PASS | `tests/regression.test.ts` (exact 6 source SKU IDs, ID `2389444540861`, Price `190000`) |
@@ -106,9 +115,9 @@ Phase 3 Initiation: Define MarketplaceAdapter contract & Shopee Product Strategy
 | 11 | Missing price never silently becomes zero | PASS | Throws `MISSING_PRICE` / `INVALID_PRICE` |
 | 12 | Missing inventory does not silently become available | PASS | Yields `available: null, status: "unknown"` |
 | 13 | Unknown stock quantity remains unknown | PASS | `exact: false, quantity: undefined` (not 0) |
-| 14 | Image priority/deduplication tested | PASS | detail $\rightarrow$ thumbnail $\rightarrow$ icon, deduplicated |
+| 14 | Image priority/deduplication tested | PASS | Unit tests in `tests/normalizer.test.ts` verify detail > thumbnail > icon, deduplication, sequential positions |
 | 15 | Source identity fields are not ambiguous | PASS | `sourceSkuId`, `merchantSku`, `displaySku` distinct |
-| 16 | Documentation reflects actual implementation | PASS | `PROJECT_MANIFEST.yaml`, `README.md`, `project-status.md`, `tests/fixtures/README.md` |
+| 16 | Documentation reflects actual implementation | PASS | `PROJECT_MANIFEST.yaml`, `README.md`, `project-status.md`, `tests/fixtures/README.md`, `docs/product/canonical-product.md` |
 | 17 | `PROJECT_CHECKLIST.md` updated | PASS | Verified in this document |
 
 ---

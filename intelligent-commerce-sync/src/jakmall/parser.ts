@@ -127,6 +127,19 @@ export function safeParseJsObject(rawObjStr: string): unknown {
   }
 }
 
+function isRecord(val: unknown): val is Record<string, unknown> {
+  return typeof val === "object" && val !== null && !Array.isArray(val);
+}
+
+function getJsonLdField(obj: Record<string, unknown>, key: string): unknown {
+  if (key in obj) return obj[key];
+  const namespacedHttp = `http://schema.org/${key}`;
+  if (namespacedHttp in obj) return obj[namespacedHttp];
+  const namespacedHttps = `https://schema.org/${key}`;
+  if (namespacedHttps in obj) return obj[namespacedHttps];
+  return undefined;
+}
+
 /**
  * Extracts embedded JSON-LD Product schema from HTML as a fallback or cross-validation source.
  */
@@ -137,11 +150,21 @@ export function extractJsonLdFallback($: cheerio.CheerioAPI): Record<string, unk
     if (!text) continue;
     try {
       const parsed = JSON.parse(text);
+      const isProductType = (item: unknown): item is Record<string, unknown> => {
+        if (!isRecord(item)) return false;
+        const type = item["@type"];
+        return (
+          type === "Product" ||
+          type === "http://schema.org/Product" ||
+          type === "https://schema.org/Product"
+        );
+      };
+
       if (Array.isArray(parsed)) {
-        const product = parsed.find((item) => item && item["@type"] === "Product");
-        if (product) return product as Record<string, unknown>;
-      } else if (parsed && parsed["@type"] === "Product") {
-        return parsed as Record<string, unknown>;
+        const product = parsed.find(isProductType);
+        if (product) return product;
+      } else if (isProductType(parsed)) {
+        return parsed;
       }
     } catch {
       // Continue to next script tag
@@ -240,13 +263,16 @@ export function parseJakmallHtml(html: string): ParsedJakmallPage {
   if (!brand) {
     const jsonLd = extractJsonLdFallback($);
     if (jsonLd) {
-      const b = jsonLd["http://schema.org/brand"] || jsonLd.brand;
-      if (b && typeof b === "object") {
-        const bName = (b as any)["http://schema.org/name"] || (b as any).name;
-        if (typeof bName === "string") brand = bName;
-        else if (bName && typeof bName === "object" && typeof (bName as any).name === "string") {
-          brand = (bName as any).name;
+      const b = getJsonLdField(jsonLd, "brand");
+      if (isRecord(b)) {
+        const bName = getJsonLdField(b, "name");
+        if (typeof bName === "string") {
+          brand = bName;
+        } else if (isRecord(bName) && typeof bName.name === "string") {
+          brand = bName.name;
         }
+      } else if (typeof b === "string") {
+        brand = b;
       }
     }
   }
@@ -308,19 +334,37 @@ export function parseJakmallHtml(html: string): ParsedJakmallPage {
       );
     }
 
-    // Inspect offers from JSON-LD safely (Product -> Offer / AggregateOffer / Array)
-    const rawOffers = jsonLd.offers;
+    // Inspect offers from JSON-LD safely (Product -> Offer / AggregateOffer / Array / nested offers[])
+    const rawOffers = getJsonLdField(jsonLd, "offers");
     let selectedOffer: Record<string, unknown> | undefined;
 
     if (Array.isArray(rawOffers)) {
-      selectedOffer = rawOffers.find(
-        (o) => o && typeof o === "object" && (o.price !== undefined || o.lowPrice !== undefined)
-      ) as Record<string, unknown> | undefined;
-    } else if (rawOffers && typeof rawOffers === "object") {
-      selectedOffer = rawOffers as Record<string, unknown>;
+      selectedOffer = rawOffers.find((o): o is Record<string, unknown> => {
+        if (!isRecord(o)) return false;
+        const p = getJsonLdField(o, "price") ?? getJsonLdField(o, "lowPrice");
+        return p !== undefined && p !== null;
+      });
+    } else if (isRecord(rawOffers)) {
+      const nestedOffers = getJsonLdField(rawOffers, "offers");
+      if (Array.isArray(nestedOffers)) {
+        selectedOffer = nestedOffers.find((o): o is Record<string, unknown> => {
+          if (!isRecord(o)) return false;
+          const p = getJsonLdField(o, "price") ?? getJsonLdField(o, "lowPrice");
+          return p !== undefined && p !== null;
+        });
+      }
+      if (!selectedOffer) {
+        selectedOffer = rawOffers;
+      }
     }
 
-    const rawPriceVal = selectedOffer?.price ?? selectedOffer?.lowPrice;
+    const rawPriceVal =
+      selectedOffer !== undefined
+        ? getJsonLdField(selectedOffer, "price") ??
+          getJsonLdField(selectedOffer, "lowPrice") ??
+          getJsonLdField(selectedOffer, "highPrice")
+        : undefined;
+
     const priceNum =
       rawPriceVal !== undefined && rawPriceVal !== null ? Number(rawPriceVal) : NaN;
 
@@ -331,24 +375,30 @@ export function parseJakmallHtml(html: string): ParsedJakmallPage {
       );
     }
 
-    const fallbackId = String(jsonLd.sku || jsonLd.productID || "unknown");
+    const rawSku = getJsonLdField(jsonLd, "sku") ?? getJsonLdField(jsonLd, "productID");
+    const fallbackId = rawSku !== undefined && rawSku !== null ? String(rawSku) : "unknown";
 
     let availabilityStock: boolean | undefined;
-    if (selectedOffer?.availability) {
-      const availStr = String(selectedOffer.availability);
-      if (availStr.includes("InStock")) {
-        availabilityStock = true;
-      } else if (availStr.includes("OutOfStock")) {
-        availabilityStock = false;
+    if (selectedOffer) {
+      const avail = getJsonLdField(selectedOffer, "availability");
+      if (avail !== undefined && avail !== null) {
+        const availStr = String(avail);
+        if (availStr.includes("InStock") || availStr.includes("LimitedAvailability")) {
+          availabilityStock = true;
+        } else if (availStr.includes("OutOfStock")) {
+          availabilityStock = false;
+        }
       }
     }
 
     let weightVal: number | undefined;
-    if (jsonLd.weight) {
-      if (typeof jsonLd.weight === "number") {
-        weightVal = jsonLd.weight;
-      } else if (typeof jsonLd.weight === "object" && (jsonLd.weight as any).value) {
-        weightVal = Number((jsonLd.weight as any).value);
+    const rawWeight = getJsonLdField(jsonLd, "weight");
+    if (typeof rawWeight === "number") {
+      weightVal = rawWeight;
+    } else if (isRecord(rawWeight)) {
+      const val = getJsonLdField(rawWeight, "value");
+      if (val !== undefined && val !== null && !isNaN(Number(val))) {
+        weightVal = Number(val);
       }
     }
 
@@ -357,7 +407,7 @@ export function parseJakmallHtml(html: string): ParsedJakmallPage {
       sku: {
         [fallbackId]: {
           id: fallbackId,
-          sku: String(jsonLd.sku || fallbackId),
+          sku: String(rawSku || fallbackId),
           price: {
             final: priceNum,
           },

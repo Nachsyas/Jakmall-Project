@@ -18,6 +18,10 @@ export class JakmallNormalizerError extends Error {
   }
 }
 
+function isRecord(val: unknown): val is Record<string, unknown> {
+  return typeof val === "object" && val !== null && !Array.isArray(val);
+}
+
 /**
  * Resolves attribute combinations for each SKU using spdt.variants and spdt.matrix.
  * Supports arbitrary dimension counts, generic nested trees, flat compound keys,
@@ -42,23 +46,23 @@ export function resolveVariantAttributes(
       : Object.entries(variantsDef).map(([key, val]) => ({ key, val }));
 
     for (const entry of rawDims) {
-      let dimName = "key" in entry ? entry.key : "";
+      let dimName = "key" in entry && typeof entry.key === "string" ? entry.key : "";
       const dimData = "val" in entry ? entry.val : entry;
 
       let optionsObj: Record<string, unknown> = {};
 
-      if (dimData && typeof dimData === "object") {
-        if ("name" in dimData && typeof (dimData as any).name === "string") {
-          dimName = (dimData as any).name;
+      if (isRecord(dimData)) {
+        if (typeof dimData.name === "string") {
+          dimName = dimData.name;
         }
-        if ("options" in dimData && typeof (dimData as any).options === "object") {
-          optionsObj = (dimData as any).options as Record<string, unknown>;
-        } else if ("items" in dimData && typeof (dimData as any).items === "object") {
-          optionsObj = (dimData as any).items as Record<string, unknown>;
-        } else if ("values" in dimData && typeof (dimData as any).values === "object") {
-          optionsObj = (dimData as any).values as Record<string, unknown>;
+        if (isRecord(dimData.options)) {
+          optionsObj = dimData.options;
+        } else if (isRecord(dimData.items)) {
+          optionsObj = dimData.items;
+        } else if (isRecord(dimData.values)) {
+          optionsObj = dimData.values;
         } else {
-          optionsObj = dimData as Record<string, unknown>;
+          optionsObj = dimData;
         }
       }
 
@@ -70,8 +74,9 @@ export function resolveVariantAttributes(
         let valString = "";
         if (typeof valItem === "string") {
           valString = valItem;
-        } else if (valItem && typeof valItem === "object") {
-          valString = String((valItem as any).name || (valItem as any).title || (valItem as any).value || "");
+        } else if (isRecord(valItem)) {
+          const rawVal = valItem.name ?? valItem.title ?? valItem.value ?? "";
+          valString = String(rawVal);
         }
         if (valString) {
           hashLookup.set(String(valHash), { dimension: dimName, value: valString });
@@ -366,16 +371,13 @@ export function normalizeToCanonical(
         ? Number(skuData.weight)
         : undefined;
 
-    const isPreorder = Boolean(
-      skuData.pre_order === true ||
-        (skuData.pre_order &&
-          typeof skuData.pre_order === "object" &&
-          Boolean(
-            (skuData.pre_order as any).enabled ??
-              (skuData.pre_order as any).is_active ??
-              (skuData.pre_order as any).status
-          ))
-    );
+    let isPreorder = false;
+    if (skuData.pre_order === true) {
+      isPreorder = true;
+    } else if (isRecord(skuData.pre_order)) {
+      const rawStatus = skuData.pre_order.enabled ?? skuData.pre_order.is_active ?? skuData.pre_order.status;
+      isPreorder = Boolean(rawStatus);
+    }
 
     canonicalVariants.push({
       sourceSkuId,

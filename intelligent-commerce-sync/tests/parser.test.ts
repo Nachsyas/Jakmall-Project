@@ -117,6 +117,151 @@ test("parseJakmallHtml falls back to JSON-LD when spdt is absent", () => {
   assert.equal(parsed.spdt.sku["GEN-01"]?.price?.final, 50000);
 });
 
+test("parseJakmallHtml handles full URI @type http://schema.org/Product and namespaced properties", () => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Namespaced Product</title>
+        <script type="application/ld+json">
+          {
+            "@context": "http://schema.org",
+            "@type": "http://schema.org/Product",
+            "http://schema.org/name": "Namespaced Earphone",
+            "http://schema.org/sku": "NS-999",
+            "http://schema.org/brand": {
+              "@type": "http://schema.org/Brand",
+              "http://schema.org/name": "NamespacedBrand"
+            },
+            "http://schema.org/weight": {
+              "@type": "http://schema.org/QuantitativeValue",
+              "http://schema.org/value": 350
+            },
+            "http://schema.org/offers": {
+              "@type": "http://schema.org/Offer",
+              "http://schema.org/price": 125000,
+              "http://schema.org/availability": "http://schema.org/InStock"
+            }
+          }
+        </script>
+      </head>
+      <body>
+        <h1 class="product-title">Namespaced Earphone</h1>
+      </body>
+    </html>
+  `;
+
+  const parsed = parseJakmallHtml(html);
+  assert.equal(parsed.title, "Namespaced Earphone");
+  assert.equal(parsed.brand, "NamespacedBrand");
+  assert.equal(parsed.spdt.id, "NS-999");
+  assert.equal(parsed.spdt.sku["NS-999"]?.price?.final, 125000);
+  assert.equal(parsed.spdt.sku["NS-999"]?.in_stock, true);
+  assert.equal(parsed.spdt.sku["NS-999"]?.weight, 350);
+});
+
+test("parseJakmallHtml handles AggregateOffer with lowPrice", () => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Aggregate Offer Product</title>
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": "Aggregate Product",
+            "sku": "AGG-01",
+            "offers": {
+              "@type": "AggregateOffer",
+              "lowPrice": 85000,
+              "highPrice": 120000,
+              "offerCount": 2,
+              "availability": "https://schema.org/InStock"
+            }
+          }
+        </script>
+      </head>
+      <body>
+        <h1 class="product-title">Aggregate Product</h1>
+      </body>
+    </html>
+  `;
+
+  const parsed = parseJakmallHtml(html);
+  assert.equal(parsed.spdt.id, "AGG-01");
+  assert.equal(parsed.spdt.sku["AGG-01"]?.price?.final, 85000);
+  assert.equal(parsed.spdt.sku["AGG-01"]?.in_stock, true);
+});
+
+test("parseJakmallHtml handles AggregateOffer with nested offers[] array", () => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Nested Offers Product</title>
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": "Nested Offers Product",
+            "productID": "NEST-01",
+            "offers": {
+              "@type": "AggregateOffer",
+              "offers": [
+                {
+                  "@type": "Offer",
+                  "price": 95000,
+                  "availability": "https://schema.org/InStock"
+                }
+              ]
+            }
+          }
+        </script>
+      </head>
+      <body>
+        <h1 class="product-title">Nested Offers Product</h1>
+      </body>
+    </html>
+  `;
+
+  const parsed = parseJakmallHtml(html);
+  assert.equal(parsed.spdt.id, "NEST-01");
+  assert.equal(parsed.spdt.sku["NEST-01"]?.price?.final, 95000);
+  assert.equal(parsed.spdt.sku["NEST-01"]?.in_stock, true);
+});
+
+test("parseJakmallHtml rejects JSON-LD missing or non-positive price", () => {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Zero Price Product</title>
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.org",
+            "@type": "Product",
+            "name": "Free Product",
+            "sku": "ZERO-01",
+            "offers": {
+              "@type": "Offer",
+              "price": 0
+            }
+          }
+        </script>
+      </head>
+      <body>
+        <h1 class="product-title">Free Product</h1>
+      </body>
+    </html>
+  `;
+
+  assert.throws(
+    () => parseJakmallHtml(html),
+    (err: unknown) => err instanceof JakmallParserError && err.code === "EXTRACTION_FAILED"
+  );
+});
+
 test("parseJakmallHtml throws on missing spdt and missing JSON-LD", () => {
   const html = `<html><body><h1>Product</h1></body></html>`;
   assert.throws(
@@ -145,4 +290,3 @@ test("parseJakmallHtml throws on invalid spdt structure", () => {
     (err: unknown) => err instanceof JakmallParserError && (err.code === "EXTRACTION_VALIDATION_FAILED" || err.code === "EXTRACTION_FAILED")
   );
 });
-
