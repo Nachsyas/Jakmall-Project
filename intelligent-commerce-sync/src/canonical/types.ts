@@ -5,9 +5,10 @@ export interface CanonicalImage {
 }
 
 export interface CanonicalVariantInventory {
-  available: boolean;
+  available: boolean | null;
   exact: boolean;
   quantity?: number | undefined;
+  status?: "in_stock" | "limited" | "out_of_stock" | "unknown" | undefined;
 }
 
 export interface CanonicalVariantPrice {
@@ -22,7 +23,10 @@ export interface CanonicalVariantPreorder {
 }
 
 export interface CanonicalVariant {
-  sourceSku: string;
+  sourceSkuId: string;
+  sourceSku: string; // Backward-compatible alias to sourceSkuId
+  merchantSku?: string | undefined;
+  displaySku?: string | undefined;
   attributes: Record<string, string>;
   price: CanonicalVariantPrice;
   inventory: CanonicalVariantInventory;

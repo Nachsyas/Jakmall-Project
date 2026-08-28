@@ -128,7 +128,7 @@ export function safeParseJsObject(rawObjStr: string): unknown {
 }
 
 /**
- * Extracts embedded JSON-LD Product schema from HTML as a fallback.
+ * Extracts embedded JSON-LD Product schema from HTML as a fallback or cross-validation source.
  */
 export function extractJsonLdFallback($: cheerio.CheerioAPI): Record<string, unknown> | null {
   const scripts = $('script[type="application/ld+json"]').toArray();
@@ -151,7 +151,61 @@ export function extractJsonLdFallback($: cheerio.CheerioAPI): Record<string, unk
 }
 
 /**
- * Extracts raw page data including text fields and validated spdt object from JakMall HTML.
+ * Extracts product specifications from HTML specification tables and lists.
+ */
+export function extractSpecifications($: cheerio.CheerioAPI): Record<string, string> {
+  const specs: Record<string, string> = {};
+
+  // Table rows with 2 cells (label and value)
+  $(
+    "table.spec-table tr, .product-specification tr, .specification tr, #specification tr, .product-spec tr, table.table-specification tr"
+  ).each((_, tr) => {
+    const cells = $(tr).find("th, td").toArray();
+    if (cells.length === 2) {
+      const key = $(cells[0]).text().trim().replace(/[:：\s]+$/, "");
+      const val = $(cells[1]).text().trim();
+      if (key && val && key.length < 100 && val.length < 500 && !specs[key]) {
+        specs[key] = val;
+      }
+    }
+  });
+
+  // Definition lists (dl dt / dd)
+  $(".product-specification dl, .specification dl, dl.specs").each((_, dl) => {
+    const dts = $(dl).find("dt").toArray();
+    const dds = $(dl).find("dd").toArray();
+    for (let i = 0; i < Math.min(dts.length, dds.length); i++) {
+      const key = $(dts[i]).text().trim().replace(/[:：\s]+$/, "");
+      const val = $(dds[i]).text().trim();
+      if (key && val && !specs[key]) {
+        specs[key] = val;
+      }
+    }
+  });
+
+  // Key-value items (.product-info-item, .spec-item, .dp__spec__row, etc.)
+  $(".product-info-item, .spec-item, .specification-item, .dp__spec__row").each((_, el) => {
+    const cols = $(el).find(".dp__spec__column").toArray();
+    if (cols.length === 2) {
+      const key = $(cols[0]).text().trim().replace(/[:：\s]+$/, "");
+      const val = $(cols[1]).text().trim();
+      if (key && val && !specs[key]) {
+        specs[key] = val;
+      }
+      return;
+    }
+    const label = $(el).find(".label, .title, .key").text().trim().replace(/[:：\s]+$/, "");
+    const value = $(el).find(".value, .desc, .text").text().trim();
+    if (label && value && !specs[label]) {
+      specs[label] = value;
+    }
+  });
+
+  return specs;
+}
+
+/**
+ * Extracts raw page data including text fields, specifications, and validated spdt object from JakMall HTML.
  */
 export function parseJakmallHtml(html: string): ParsedJakmallPage {
   const $ = cheerio.load(html);
@@ -177,20 +231,42 @@ export function parseJakmallHtml(html: string): ParsedJakmallPage {
   desc$("script, style, noscript, iframe, link").remove();
   const description = desc$.text().trim();
 
-  // Brand extraction
-  const brand =
+  // Brand extraction: meta tags, product-brand link, or JSON-LD
+  let brand =
     $('meta[property="product:brand"]').attr("content")?.trim() ||
     $('.product-brand a').text().trim() ||
     null;
+
+  if (!brand) {
+    const jsonLd = extractJsonLdFallback($);
+    if (jsonLd) {
+      const b = jsonLd["http://schema.org/brand"] || jsonLd.brand;
+      if (b && typeof b === "object") {
+        const bName = (b as any)["http://schema.org/name"] || (b as any).name;
+        if (typeof bName === "string") brand = bName;
+        else if (bName && typeof bName === "object" && typeof (bName as any).name === "string") {
+          brand = (bName as any).name;
+        }
+      }
+    }
+  }
 
   // Breadcrumbs / category path
   const categoryPath: string[] = [];
   $(".breadcrumb a, .breadcrumb span, [itemprop='itemListElement'] a").each((_, el) => {
     const text = $(el).text().trim();
-    if (text && text.toLowerCase() !== "home" && text.toLowerCase() !== "jakmall" && !categoryPath.includes(text)) {
+    if (
+      text &&
+      text.toLowerCase() !== "home" &&
+      text.toLowerCase() !== "jakmall" &&
+      !categoryPath.includes(text)
+    ) {
       categoryPath.push(text);
     }
   });
+
+  // Specifications
+  const specifications = extractSpecifications($);
 
   // 2. Embedded spdt state extraction
   let rawSpdt: JakmallRawSpdt | null = null;
@@ -232,20 +308,63 @@ export function parseJakmallHtml(html: string): ParsedJakmallPage {
       );
     }
 
-    // Construct minimal spdt from JSON-LD
+    // Inspect offers from JSON-LD safely (Product -> Offer / AggregateOffer / Array)
+    const rawOffers = jsonLd.offers;
+    let selectedOffer: Record<string, unknown> | undefined;
+
+    if (Array.isArray(rawOffers)) {
+      selectedOffer = rawOffers.find(
+        (o) => o && typeof o === "object" && (o.price !== undefined || o.lowPrice !== undefined)
+      ) as Record<string, unknown> | undefined;
+    } else if (rawOffers && typeof rawOffers === "object") {
+      selectedOffer = rawOffers as Record<string, unknown>;
+    }
+
+    const rawPriceVal = selectedOffer?.price ?? selectedOffer?.lowPrice;
+    const priceNum =
+      rawPriceVal !== undefined && rawPriceVal !== null ? Number(rawPriceVal) : NaN;
+
+    if (isNaN(priceNum) || priceNum <= 0) {
+      throw new JakmallParserError(
+        "JSON-LD fallback lacks valid positive price",
+        "EXTRACTION_FAILED"
+      );
+    }
+
     const fallbackId = String(jsonLd.sku || jsonLd.productID || "unknown");
-    const offers = jsonLd.offers as Record<string, unknown> | undefined;
-    const priceVal = typeof offers?.price === "number" ? offers.price : Number(offers?.price || 0);
+
+    let availabilityStock: boolean | undefined;
+    if (selectedOffer?.availability) {
+      const availStr = String(selectedOffer.availability);
+      if (availStr.includes("InStock")) {
+        availabilityStock = true;
+      } else if (availStr.includes("OutOfStock")) {
+        availabilityStock = false;
+      }
+    }
+
+    let weightVal: number | undefined;
+    if (jsonLd.weight) {
+      if (typeof jsonLd.weight === "number") {
+        weightVal = jsonLd.weight;
+      } else if (typeof jsonLd.weight === "object" && (jsonLd.weight as any).value) {
+        weightVal = Number((jsonLd.weight as any).value);
+      }
+    }
 
     rawSpdt = {
       id: fallbackId,
       sku: {
         [fallbackId]: {
-          sku: fallbackId,
+          id: fallbackId,
+          sku: String(jsonLd.sku || fallbackId),
           price: {
-            final: priceVal,
+            final: priceNum,
           },
-          in_stock: offers?.availability?.toString().includes("InStock") ?? true,
+          in_stock: availabilityStock,
+          is_limited_stock: false,
+          limited_stock: null,
+          weight: weightVal,
         },
       },
     };
@@ -256,6 +375,7 @@ export function parseJakmallHtml(html: string): ParsedJakmallPage {
     description,
     brand,
     categoryPath,
+    specifications,
     spdt: rawSpdt,
   };
 }

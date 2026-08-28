@@ -27,7 +27,10 @@ export interface JakmallImage {
 }
 
 export interface JakmallVariant {
-  skuId: string;
+  sourceSkuId: string;
+  skuId: string; // Backward-compatible alias to sourceSkuId
+  merchantSku?: string | null;
+  displaySku?: string | null;
   attributes: Record<string, string>;
   price: JakmallPrice;
   stock: JakmallStock;
@@ -45,6 +48,7 @@ export interface JakmallProduct {
   description: string;
   brand: string | null;
   categoryPath: string[];
+  specifications: Record<string, string>;
   store: {
     id: string | null;
     name: string | null;
@@ -65,29 +69,32 @@ export const JakmallRawSkuImageSchema = z.object({
 }).or(z.string());
 
 export const JakmallRawSkuPriceSchema = z.object({
-  list: z.number().nullable().optional(),
-  normal: z.number().nullable().optional(),
-  final: z.number(),
+  list: z.union([z.number(), z.string()]).nullable().optional(),
+  normal: z.union([z.number(), z.string()]).nullable().optional(),
+  final: z.union([z.number(), z.string()]).nullable().optional(),
+  discount_percentage: z.union([z.number(), z.string()]).nullable().optional(),
 }).passthrough();
 
 export const JakmallRawSkuItemSchema = z.object({
   id: z.union([z.string(), z.number()]).optional(),
-  sku: z.string(),
-  weight: z.number().nullable().optional(),
+  sku: z.union([z.string(), z.number()]).nullable().optional(),
+  sku_display: z.union([z.string(), z.number()]).nullable().optional(),
+  weight: z.union([z.number(), z.string()]).nullable().optional(),
   images: z.array(JakmallRawSkuImageSchema).optional(),
-  in_stock: z.boolean().optional(),
-  is_limited_stock: z.boolean().optional(),
-  limited_stock: z.number().nullable().optional(),
-  is_coming_soon: z.boolean().optional(),
-  is_new: z.boolean().optional(),
-  price: JakmallRawSkuPriceSchema.optional(),
-  pre_order: z.union([z.boolean(), z.record(z.string(), z.unknown())]).optional(),
+  in_stock: z.boolean().nullable().optional(),
+  is_limited_stock: z.boolean().nullable().optional(),
+  limited_stock: z.union([z.number(), z.string()]).nullable().optional(),
+  is_coming_soon: z.boolean().nullable().optional(),
+  is_new: z.boolean().nullable().optional(),
+  price: JakmallRawSkuPriceSchema.nullable().optional(),
+  pre_order: z.union([z.boolean(), z.record(z.string(), z.unknown())]).nullable().optional(),
   weight_information: z.string().nullable().optional(),
-  url: z.string().optional(),
+  url: z.string().nullable().optional(),
 }).passthrough();
 
 export const JakmallRawSpdtSchema = z.object({
   id: z.union([z.string(), z.number()]),
+  name: z.string().optional(),
   url: z.string().optional(),
   sku: z.record(z.string(), JakmallRawSkuItemSchema),
   variants: z.record(z.string(), z.unknown()).optional(),
@@ -106,5 +113,6 @@ export interface ParsedJakmallPage {
   description: string;
   brand: string | null;
   categoryPath: string[];
+  specifications: Record<string, string>;
   spdt: JakmallRawSpdt;
 }

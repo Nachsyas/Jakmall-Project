@@ -80,6 +80,7 @@ test("normalizeToCanonical transforms ParsedJakmallPage to CanonicalProduct cont
     description: "Jaket gunung bahan taslan waterproof",
     brand: "Eiger",
     categoryPath: ["Fashion", "Jaket Pria"],
+    specifications: { "Material": "Taslan Waterproof" },
     spdt: {
       id: "prod-888",
       sku: {

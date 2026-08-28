@@ -5,16 +5,23 @@ import type {
 } from "../canonical/types.js";
 import type {
   ParsedJakmallPage,
-  JakmallProduct,
-  JakmallVariant,
-  JakmallStock,
-  JakmallPrice,
   JakmallRawSkuItem,
 } from "./types.js";
 
+export class JakmallNormalizerError extends Error {
+  constructor(
+    message: string,
+    public readonly code: string = "NORMALIZATION_FAILED"
+  ) {
+    super(message);
+    this.name = "JakmallNormalizerError";
+  }
+}
+
 /**
  * Resolves attribute combinations for each SKU using spdt.variants and spdt.matrix.
- * Supports arbitrary dimension counts (generic multi-dimensional traversal).
+ * Supports arbitrary dimension counts, generic nested trees, flat compound keys,
+ * and tracks `previous` dimension ordering where present in source data.
  */
 export function resolveVariantAttributes(
   variantsDef?: Record<string, unknown>,
@@ -22,100 +29,229 @@ export function resolveVariantAttributes(
 ): Map<string, Record<string, string>> {
   const skuAttributes = new Map<string, Record<string, string>>();
 
-  if (!matrixDef) {
+  if (!matrixDef || typeof matrixDef !== "object") {
     return skuAttributes;
   }
 
-  // Dimension value lookup: Map<hashId, { dimensionName: string, valueName: string }>
+  // 1. Build dimension lookup and track previous ordering if available
   const hashLookup = new Map<string, { dimension: string; value: string }>();
 
-  if (variantsDef) {
-    for (const [dimName, dimValues] of Object.entries(variantsDef)) {
-      if (typeof dimValues === "object" && dimValues !== null) {
-        for (const [valHash, valName] of Object.entries(dimValues)) {
-          hashLookup.set(String(valHash), {
-            dimension: dimName,
-            value: String(valName),
-          });
+  if (variantsDef && typeof variantsDef === "object") {
+    const rawDims = Array.isArray(variantsDef)
+      ? variantsDef
+      : Object.entries(variantsDef).map(([key, val]) => ({ key, val }));
+
+    for (const entry of rawDims) {
+      let dimName = "key" in entry ? entry.key : "";
+      const dimData = "val" in entry ? entry.val : entry;
+
+      let optionsObj: Record<string, unknown> = {};
+
+      if (dimData && typeof dimData === "object") {
+        if ("name" in dimData && typeof (dimData as any).name === "string") {
+          dimName = (dimData as any).name;
+        }
+        if ("options" in dimData && typeof (dimData as any).options === "object") {
+          optionsObj = (dimData as any).options as Record<string, unknown>;
+        } else if ("items" in dimData && typeof (dimData as any).items === "object") {
+          optionsObj = (dimData as any).items as Record<string, unknown>;
+        } else if ("values" in dimData && typeof (dimData as any).values === "object") {
+          optionsObj = (dimData as any).values as Record<string, unknown>;
+        } else {
+          optionsObj = dimData as Record<string, unknown>;
+        }
+      }
+
+      for (const [valHash, valItem] of Object.entries(optionsObj)) {
+        // Skip metadata keys if present
+        if (["previous", "name", "id", "label"].includes(valHash) && typeof valItem === "string" && !hashLookup.has(valHash)) {
+          continue;
+        }
+        let valString = "";
+        if (typeof valItem === "string") {
+          valString = valItem;
+        } else if (valItem && typeof valItem === "object") {
+          valString = String((valItem as any).name || (valItem as any).title || (valItem as any).value || "");
+        }
+        if (valString) {
+          hashLookup.set(String(valHash), { dimension: dimName, value: valString });
         }
       }
     }
   }
 
-  // Traverse matrix entries:
-  // Matrix format can be { "hash1,hash2": "skuId" } or { "skuId": "hash1,hash2" } or { "skuId": { ... } }
-  for (const [key, val] of Object.entries(matrixDef)) {
-    let skuId: string;
-    let hashes: string[] = [];
+  // 2. Helper to assign attributes to a resolved leaf SKU ID
+  function assignAttrs(skuId: string, collectedHashes: string[]) {
+    if (!skuId) return;
+    const existing = skuAttributes.get(skuId) || {};
+    const attrs: Record<string, string> = { ...existing };
 
-    if (typeof val === "string") {
-      // If key contains commas, it's combo -> skuId
-      if (key.includes(",") || hashLookup.has(key)) {
-        hashes = key.split(",").map((s) => s.trim());
-        skuId = val;
-      } else {
-        // key is skuId, val is comma-separated hashes
-        skuId = key;
-        hashes = val.split(",").map((s) => s.trim());
-      }
-    } else {
-      skuId = key;
-    }
-
-    const attrs: Record<string, string> = {};
-    for (const h of hashes) {
-      const match = hashLookup.get(h);
-      if (match) {
-        attrs[match.dimension] = match.value;
+    for (const h of collectedHashes) {
+      // Support comma-separated compound hashes
+      const subHashes = h.includes(",") ? h.split(",").map((s) => s.trim()) : [h];
+      for (const sub of subHashes) {
+        const match = hashLookup.get(sub);
+        if (match) {
+          attrs[match.dimension] = match.value;
+        }
       }
     }
 
     skuAttributes.set(skuId, attrs);
   }
 
+  // 3. Recursive traversal of matrix
+  function traverse(node: unknown, pathHashes: string[], previousRef?: string) {
+    if (node === null || node === undefined) {
+      return;
+    }
+
+    // Leaf: string or number representing SKU ID
+    if (typeof node === "string" || typeof node === "number") {
+      const allHashes = [...pathHashes];
+      if (previousRef) allHashes.push(previousRef);
+      assignAttrs(String(node), allHashes);
+      return;
+    }
+
+    if (typeof node === "object") {
+      const obj = node as Record<string, unknown>;
+
+      // Check if node is an explicit leaf object with sku/id/sku_id/source_sku_id
+      const explicitSku = obj.sku || obj.sku_id || obj.skuId || obj.source_sku_id;
+      if (explicitSku && (typeof explicitSku === "string" || typeof explicitSku === "number")) {
+        const allHashes = [...pathHashes];
+        if (obj.previous && typeof obj.previous === "string") allHashes.push(obj.previous);
+        if (obj.hash && typeof obj.hash === "string") allHashes.push(obj.hash);
+        if (previousRef) allHashes.push(previousRef);
+        assignAttrs(String(explicitSku), allHashes);
+        return;
+      }
+
+      // Check for node-level previous reference
+      const currentPrevious = typeof obj.previous === "string" ? obj.previous : previousRef;
+
+      for (const [key, val] of Object.entries(obj)) {
+        if (key === "previous" || key === "hash") continue;
+
+        // If val is a string/number, check if key is compound hashes or single hash
+        if (typeof val === "string" || typeof val === "number") {
+          // If key is known to hashLookup or contains comma: key is combo -> val is skuId
+          if (hashLookup.has(key) || key.includes(",")) {
+            const allHashes = [...pathHashes, key];
+            if (currentPrevious) allHashes.push(currentPrevious);
+            assignAttrs(String(val), allHashes);
+          } else {
+            // key is skuId, val is hash combo
+            const allHashes = [...pathHashes, String(val)];
+            if (currentPrevious) allHashes.push(currentPrevious);
+            assignAttrs(key, allHashes);
+          }
+        } else if (Array.isArray(val)) {
+          // key is skuId, val is array of hashes
+          const allHashes = [...pathHashes, ...val.map(String)];
+          if (currentPrevious) allHashes.push(currentPrevious);
+          assignAttrs(key, allHashes);
+        } else if (typeof val === "object" && val !== null) {
+          // Nested object: recurse
+          traverse(val, [...pathHashes, key], currentPrevious);
+        }
+      }
+    }
+  }
+
+  traverse(matrixDef, []);
+
   return skuAttributes;
 }
 
 /**
- * Normalizes stock semantics strictly according to Bagian 16 of Project Constitution.
+ * Normalizes stock semantics strictly according to Bagian 16 of Project Constitution and User Directives:
+ * - CASE 1: in_stock === false -> OUT_OF_STOCK (available: false, exact: true, quantity: 0)
+ * - CASE 2: in_stock === true && is_limited_stock === true && limited_stock != null -> available: true, exact: true, quantity: limited_stock
+ * - CASE 3: in_stock === true && is_limited_stock === false -> available: true, exact: false, quantity: undefined
+ * - Inconsistent: is_limited_stock === true && limited_stock == null -> UNKNOWN / INCOMPLETE
+ * - Missing: in_stock == null/undefined -> UNKNOWN / INCOMPLETE
  */
 export function normalizeStock(sku: JakmallRawSkuItem): {
-  available: boolean;
+  available: boolean | null;
   exact: boolean;
   quantity?: number | undefined;
+  status: "in_stock" | "limited" | "out_of_stock" | "unknown";
 } {
-  const inStock = sku.in_stock !== false;
-  const isLimited = Boolean(sku.is_limited_stock);
-  const limitedStock = sku.limited_stock;
+  const inStock = sku.in_stock;
+  const isLimited = sku.is_limited_stock;
+  const limitedStock =
+    sku.limited_stock !== undefined && sku.limited_stock !== null
+      ? typeof sku.limited_stock === "number"
+        ? sku.limited_stock
+        : Number(sku.limited_stock)
+      : null;
 
-  // CASE 1: in_stock == false -> OUT_OF_STOCK
-  if (!inStock) {
+  // Missing or non-boolean in_stock -> explicit UNKNOWN (available: null)
+  if (inStock === null || inStock === undefined) {
+    return {
+      available: null,
+      exact: false,
+      quantity: undefined,
+      status: "unknown",
+    };
+  }
+
+  // CASE 1: in_stock == false -> OUT_OF_STOCK (confirmed 0 stock)
+  if (inStock === false) {
     return {
       available: false,
       exact: true,
       quantity: 0,
+      status: "out_of_stock",
     };
   }
 
-  // CASE 2: in_stock == true AND is_limited_stock == true AND limited_stock != null
-  if (isLimited && limitedStock !== null && limitedStock !== undefined) {
+  // inStock === true:
+  // Inconsistent check: is_limited_stock === true BUT limited_stock === null / NaN
+  if (isLimited === true) {
+    if (limitedStock !== null && !isNaN(limitedStock) && limitedStock >= 0) {
+      // CASE 2: in_stock == true && is_limited_stock == true && limited_stock != null
+      return {
+        available: true,
+        exact: true,
+        quantity: limitedStock,
+        status: "limited",
+      };
+    } else {
+      // Inconsistent source data: claims limited stock but no valid quantity -> UNKNOWN (available: null)
+      return {
+        available: null,
+        exact: false,
+        quantity: undefined,
+        status: "unknown",
+      };
+    }
+  }
+
+  // CASE 3: in_stock == true && is_limited_stock == false
+  if (isLimited === false) {
     return {
       available: true,
-      exact: true,
-      quantity: Math.max(0, limitedStock),
+      exact: false,
+      quantity: undefined,
+      status: "in_stock",
     };
   }
 
-  // CASE 3: in_stock == true AND is_limited_stock == false (exact stock unknown)
+  // If is_limited_stock is missing/undefined while in_stock is true -> UNKNOWN (available: null)
   return {
-    available: true,
+    available: null,
     exact: false,
     quantity: undefined,
+    status: "unknown",
   };
 }
 
 /**
- * Normalizes SKU images to CanonicalImage array with deduplication.
+ * Normalizes SKU images to CanonicalImage array with deduplication and priority:
+ * detail -> thumbnail -> icon.
  */
 export function normalizeImages(
   skuImages?: JakmallRawSkuItem["images"]
@@ -152,12 +288,13 @@ export function normalizeImages(
 
 /**
  * Normalizes raw parsed JakMall data into the project's CanonicalProduct model.
+ * Enforces strict price verification (never falls back to Rp0).
  */
 export function normalizeToCanonical(
   parsed: ParsedJakmallPage,
   sourceUrl: string
 ): CanonicalProduct {
-  const { spdt, title, description, brand, categoryPath } = parsed;
+  const { spdt, title, description, brand, categoryPath, specifications } = parsed;
   const productId = String(spdt.id);
 
   // Resolve attributes matrix
@@ -170,12 +307,50 @@ export function normalizeToCanonical(
   const allImagesMap = new Map<string, CanonicalImage>();
 
   for (const [skuKey, skuData] of Object.entries(spdt.sku)) {
-    const skuId = String(skuData.sku || skuData.id || skuKey);
-    const attributes = matrixAttributes.get(skuId) || matrixAttributes.get(skuKey) || {};
+    // Source identity: sourceSkuId, merchantSku, displaySku
+    const sourceSkuId = String(skuData.id || skuKey);
+    const merchantSku =
+      skuData.sku !== null && skuData.sku !== undefined && String(skuData.sku).trim() !== ""
+        ? String(skuData.sku)
+        : undefined;
+    const displaySku =
+      skuData.sku_display !== null && skuData.sku_display !== undefined && String(skuData.sku_display).trim() !== ""
+        ? String(skuData.sku_display)
+        : undefined;
 
-    const finalPrice = Math.round(skuData.price?.final ?? 0);
-    const listPrice = skuData.price?.list ? Math.round(skuData.price.list) : undefined;
-    const normalPrice = skuData.price?.normal ? Math.round(skuData.price.normal) : undefined;
+    // Attributes match by sourceSkuId, id, skuKey, or merchantSku
+    const attributes =
+      matrixAttributes.get(sourceSkuId) ||
+      matrixAttributes.get(skuKey) ||
+      (merchantSku ? matrixAttributes.get(merchantSku) : undefined) ||
+      {};
+
+    // Authoritative Price Validation:
+    // Missing, null, or non-positive price MUST NOT become Rp0; it must throw!
+    const rawFinalPrice = skuData.price?.final;
+    if (rawFinalPrice === null || rawFinalPrice === undefined || rawFinalPrice === "") {
+      throw new JakmallNormalizerError(
+        `SKU ${sourceSkuId} is missing authoritative final price`,
+        "MISSING_PRICE"
+      );
+    }
+    const finalPriceNum = typeof rawFinalPrice === "number" ? rawFinalPrice : Number(rawFinalPrice);
+    if (isNaN(finalPriceNum) || finalPriceNum <= 0) {
+      throw new JakmallNormalizerError(
+        `SKU ${sourceSkuId} has invalid or non-positive final price: ${rawFinalPrice}`,
+        "INVALID_PRICE"
+      );
+    }
+    const finalPrice = Math.round(finalPriceNum);
+
+    const listPrice =
+      skuData.price?.list !== null && skuData.price?.list !== undefined
+        ? Math.round(Number(skuData.price.list))
+        : undefined;
+    const normalPrice =
+      skuData.price?.normal !== null && skuData.price?.normal !== undefined
+        ? Math.round(Number(skuData.price.normal))
+        : undefined;
 
     const inventory = normalizeStock(skuData);
     const images = normalizeImages(skuData.images);
@@ -187,18 +362,26 @@ export function normalizeToCanonical(
     }
 
     const weightGrams =
-      typeof skuData.weight === "number" && !isNaN(skuData.weight)
-        ? skuData.weight
+      skuData.weight !== null && skuData.weight !== undefined && !isNaN(Number(skuData.weight))
+        ? Number(skuData.weight)
         : undefined;
 
     const isPreorder = Boolean(
-      typeof skuData.pre_order === "boolean"
-        ? skuData.pre_order
-        : skuData.pre_order && typeof skuData.pre_order === "object"
+      skuData.pre_order === true ||
+        (skuData.pre_order &&
+          typeof skuData.pre_order === "object" &&
+          Boolean(
+            (skuData.pre_order as any).enabled ??
+              (skuData.pre_order as any).is_active ??
+              (skuData.pre_order as any).status
+          ))
     );
 
     canonicalVariants.push({
-      sourceSku: skuId,
+      sourceSkuId,
+      sourceSku: sourceSkuId, // backward-compatible alias
+      merchantSku,
+      displaySku,
       attributes,
       price: {
         list: listPrice,
@@ -233,7 +416,7 @@ export function normalizeToCanonical(
     categoryPath,
     variants: canonicalVariants,
     images: Array.from(allImagesMap.values()),
-    specifications: {},
+    specifications: specifications || {},
     seller: {
       id: sellerId,
       name: sellerName,

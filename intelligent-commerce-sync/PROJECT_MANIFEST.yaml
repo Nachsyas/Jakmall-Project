@@ -8,10 +8,10 @@ project:
 core_flow:
   extraction: true
   normalization: true
-  marketplace_mapping: true
-  review: true
-  marketplace_listing: true
-  verification: true
+  marketplace_mapping: false
+  review: false
+  marketplace_listing: false
+  verification: false
 
 source:
   primary_strategy: static-http
@@ -34,6 +34,7 @@ documentation:
   documentation_as_code: true
 
 managed_files:
+  - PROJECT_CHECKLIST.md
   - PROJECT_MANIFEST.yaml
   - README.md
   - package.json
@@ -45,9 +46,14 @@ managed_files:
   - src/jakmall/parser.ts
   - src/jakmall/normalizer.ts
   - src/jakmall/adapter.ts
+  - scripts/test-jakmall.ts
   - tests/client.test.ts
   - tests/parser.test.ts
   - tests/normalizer.test.ts
+  - tests/regression.test.ts
+  - tests/fixtures/acmic.html
+  - tests/fixtures/momo.html
+  - tests/fixtures/asv.html
   - docs/project-status.md
   - docs/known-limitations.md
   - docs/source/jakmall-extraction.md
