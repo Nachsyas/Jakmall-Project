@@ -8,8 +8,8 @@ project:
 core_flow:
   extraction: true
   normalization: true
-  marketplace_mapping: false
-  review: false
+  marketplace_mapping: true
+  review: true
   marketplace_listing: false
   verification: false
 
@@ -39,6 +39,7 @@ managed_files:
   - README.md
   - package.json
   - tsconfig.json
+  - .env.example
   - src/index.ts
   - src/canonical/types.ts
   - src/jakmall/types.ts
@@ -46,11 +47,25 @@ managed_files:
   - src/jakmall/parser.ts
   - src/jakmall/normalizer.ts
   - src/jakmall/adapter.ts
+  - src/marketplace/types.ts
+  - src/marketplace/shopee/types.ts
+  - src/marketplace/shopee/policy.ts
+  - src/marketplace/shopee/mapper.ts
+  - src/marketplace/shopee/builder.ts
+  - src/marketplace/shopee/adapter.ts
+  - src/marketplace/shopee/verifier.ts
   - scripts/test-jakmall.ts
+  - scripts/test-shopee-draft.ts
   - tests/client.test.ts
   - tests/parser.test.ts
   - tests/normalizer.test.ts
   - tests/regression.test.ts
+  - tests/marketplace-policy.test.ts
+  - tests/shopee-mapper.test.ts
+  - tests/shopee-builder.test.ts
+  - tests/shopee-adapter.test.ts
+  - tests/shopee-verifier.test.ts
+  - tests/fixtures/README.md
   - tests/fixtures/acmic.html
   - tests/fixtures/momo.html
   - tests/fixtures/asv.html
@@ -61,3 +76,4 @@ managed_files:
   - docs/product/canonical-product.md
   - docs/product/field-ownership.md
   - docs/architecture/system-overview.md
+  - docs/marketplace/shopee-integration.md

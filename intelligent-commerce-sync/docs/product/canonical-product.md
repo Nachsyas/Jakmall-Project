@@ -38,7 +38,7 @@ export interface CanonicalVariant {
   sourceSku: string;
   /** Merchant-defined SKU code if provided by seller (e.g. "OMPKGKBK") */
   merchantSku?: string | undefined;
-  /** User-facing display SKU as shown on source UI; defaults to sourceSkuId */
+  /** User-facing display SKU provided by the source when explicitly present. It may be undefined. */
   displaySku?: string | undefined;
 
   attributes: Record<string, string>;

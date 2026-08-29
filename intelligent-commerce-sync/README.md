@@ -1,50 +1,15 @@
-# Intelligent Product Sync Platform (JakMall → Shopee)
+# Intelligent Product Sync Platform
+### JakMall → Shopee Intelligent Synchronization Engine
 
-Platform sinkronisasi produk cerdas dari **JakMall** ke **Shopee** dengan arsitektur Modular Monolith, ekstraksi statis berkinerja tinggi, dan model data kanonikal type-safe.
-
----
-
-## 📌 Problem & Solution
-
-* **Problem:** Sinkronisasi manual katalog produk dari marketplace sumber (JakMall) ke channel penjualan (Shopee) memakan waktu, rawan kesalahan mapping varian (misal ukuran vs warna), rentan overselling akibat semantik stok yang keliru, dan lambat jika bergantung pada browser automation penuh.
-* **Solution:** Menggunakan pendekatan **Static HTTP First** yang mengekstrak state `var spdt` terstruktur secara aman (tanpa `eval()`), menormalisasinya ke dalam kontrak `CanonicalProduct`, menyelesaikan matriks varian multidimensi secara rekursif (termasuk relasi `previous`), serta menerapkan aturan semantik harga & stok yang ketat sebelum listing ke marketplace tujuan.
+Platform sinkronisasi katalog e-commerce otomatis dari **JakMall** ke **Shopee Indonesia**, dirancang dengan arsitektur *modular monolith*, prinsip *Zero-Trust*, penanganan *Strict Stock & Price Semantics*, pemetaan marketplace cerdas, dan gerbang *Human-in-the-Loop Review*.
 
 ---
 
-## 🏗️ Architecture & Core Flow
+## 🚀 Quickstart
 
-```
-JakMall Product URL / HTML Fixture
-        ↓
-SSRF Safe Fetcher (jakmall.com allowlist)
-        ↓
-Cheerio DOM + Balanced Brace spdt Extractor (JSON-LD Fallback + Specs)
-        ↓
-Zero-Trust Zod Schema Validation (toleran terhadap sku: null, pre_order: null)
-        ↓
-Canonical Normalizer (Multi-dimensional recursive variant resolver + strict price & stock guards)
-        ↓
-CanonicalProduct Contract (sourceSkuId, merchantSku, displaySku)
-        ↓
-Shopee Marketplace Adapter (Phase 3)
-```
-
----
-
-## 🛠️ Tech Stack
-
-* **Runtime & Language:** Node.js (v20+ / v25), TypeScript 5.8+ (Strict, `verbatimModuleSyntax`, `exactOptionalPropertyTypes`)
-* **Scraper / Parser:** Cheerio, Native Fetch (with SSRF protection), Custom Balanced-Brace AST parser
-* **Schema Validation:** Zod (Zero-Trust)
-* **Test Runner:** Node.js Native Test Runner via `tsx`
-* **Architecture:** Modular Monolith
-
----
-
-## 🚀 Quick Start
-
-### 1. Installation
+### 1. Setup Lingkungan
 ```bash
+# Pastikan Node.js v20+ terpasang
 npm install
 ```
 
@@ -53,11 +18,11 @@ npm install
 # Type check with zero 'any'
 npm run typecheck
 
-# Run all unit and golden fixture regression tests
+# Run all unit, policy, mapper, adapter, verifier, and golden fixture regression tests
 npm test
 ```
 
-### 3. Run Diagnostic Utility
+### 3. Run JakMall Extraction Diagnostic
 ```bash
 # Run against local golden fixtures
 npx tsx scripts/test-jakmall.ts tests/fixtures/acmic.html
@@ -68,11 +33,19 @@ npx tsx scripts/test-jakmall.ts tests/fixtures/asv.html
 npx tsx scripts/test-jakmall.ts https://www.jakmall.com/baseus-store/baseus-encok-true-wireless-earphones-wm01
 ```
 
+### 4. Run Shopee Listing Preparation & Review Preview
+```bash
+# Prepare Shopee draft listing, calculate prices/stock, and run dry-run simulation
+npx tsx scripts/test-shopee-draft.ts tests/fixtures/acmic.html
+npx tsx scripts/test-shopee-draft.ts tests/fixtures/momo.html
+npx tsx scripts/test-shopee-draft.ts tests/fixtures/asv.html
+```
+
 ---
 
-## 🧪 Testing & Golden Regression Coverage
+## 🧪 Testing & Architecture Coverage
 
-Pengujian otomatis mencakup 21 tests (0 suites) yang memverifikasi:
+Pengujian otomatis mencakup **46 tests (0 suites)** yang memverifikasi:
 * **SSRF Protection:** Memblokir `localhost`, `127.0.0.1`, AWS metadata IP `169.254.169.254`, `file://`, non-allowlisted host.
 * **Balanced Brace Extraction:** Mengurai kurung kurawal bersarang, string quotes, escape sequence tanpa JavaScript `eval()`.
 * **Semantik Stok Ketat:**
@@ -87,8 +60,15 @@ Pengujian otomatis mencakup 21 tests (0 suites) yang memverifikasi:
   * **ACMIC CPD65:** Tepat me-resolve 9 source SKU dimensi `Lain-lain`, toleran terhadap `sku: null`, membedakan harga antar SKU (Rp379k, Rp449k, Rp299k, Rp399k), limited stock 3.
   * **MOMO Cargo:** Memisahkan `sourceSkuId` (`2715227285879`), `merchantSku` (`OMPKGKBK`), dan `displaySku`; me-resolve `Ukuran = XL` dan `Warna = Hitam`; mengabaikan deskripsi teks untuk varian aktif.
   * **ASV Raincoat:** Tepat me-resolve 6 kombinasi dimensi `Ukuran` $\times$ `Warna`, toleran `sku: null` dan `pre_order: null`, berat 1700g, harga 190.000.
-* **Spesifikasi Produk:** Ekstraksi key-value dari tabel/list HTML ke `specifications`.
 * **JSON-LD Fallback:** Mendukung plain dan namespaced schema.org (`@type: Product`, `@type: http://schema.org/Product`, `Offer`, `AggregateOffer`, `offers[]`) dengan penolakan harga missing/non-positif secara ketat.
+* **Marketplace Abstraction & Shopee Draft:** Kontrak `MarketplaceAdapter` terpisah dari detail Shopee; model `ShopeeListingDraft` independen dari `CanonicalProduct`.
+* **Deterministic Pricing Policy:** Perhitungan markup berbasis persentase atau nominal tetap dengan pembulatan ke atas (*ceiling rounding*) ke kelipatan IDR terdekat (misal Rp1.000), penegakan margin minimum, dan penyangga biaya marketplace (*fee buffer*).
+* **Deterministic Inventory Policy:** Stok konfirmasi OOS dipetakan ke 0, stok pasti dipetakan secara utuh, kuantitas tidak diungkap (*undisclosed*) dicegah dari penerbitan otomatis via `needs_review` atau dialokasikan via `safety_stock_fixed`, stok UNKNOWN diblokir mutlak.
+* **Category & Attribute Mapping:** Aturan pemetaan kategori deterministik dan dukungan override manual tanpa ketergantungan wajib pada AI.
+* **Zero Source Mutation Guarantee:** Pengujian snapshot regresi membuktikan bahwa `buildShopeeDraft` sama sekali tidak memodifikasi objek `CanonicalProduct`.
+* **Human Review Gate:** Gerbang peninjauan eksplisit (`APPROVE`, `REJECT`, `EDIT_REQUIRED`) yang secara ketat mencegah draf dengan isu `BLOCKER` diterbitkan.
+* **Dry-Run & Publish Safety Boundary:** Mode `dry_run` menghasilkan muatan simulasi tanpa request jaringan; mode `publish` menghentikan eksekusi dengan status `BLOCKED_BY_CREDENTIALS` jika kredensial resmi tidak dikonfigurasi (State B: Platform-Access-Limited E2E).
+* **Read-After-Write Verifier:** Mesin verifikasi baca-ulang yang mendeteksi ketidaksesuaian (*mismatch*) judul, jumlah variasi, harga per varian, dan stok per varian pada listing marketplace remote.
 
 ---
 
@@ -97,12 +77,13 @@ Pengujian otomatis mencakup 21 tests (0 suites) yang memverifikasi:
 * **SSRF Protection:** URL input divalidasi dengan allowlist ketat (`jakmall.com`, `www.jakmall.com`), menolak seluruh private IP & loopback.
 * **Zero Eval Execution:** Ekstraksi objek JavaScript menggunakan parser kedalaman brace mandiri, bukan `eval()` atau `Function()`.
 * **Zero-Trust Validation:** Seluruh payload source divalidasi terhadap skema Zod sebelum dinormalisasi.
+* **Zero Fabrication Principle:** Platform tidak pernah memalsukan kredensial API atau mengklaim status `PUBLISHED` palsu.
 * **Untrusted Content Boundary:** Deskripsi dan metadata HTML diperlakukan sebagai data mentah yang diisolasi, bukan instruksi.
-* **Type Safety:** 100% type-safe tanpa tipe `any`.
+* **Type Safety:** 100% type-safe tanpa tipe `any` di seluruh direktori `src/`.
 
 ---
 
 ## 🤖 AI-Assisted Development Disclosure
 
 * **Tooling:** Dikembangkan dengan panduan AI Agent Antigravity sesuai instruksi `PROMPT CONTINUATION MASTER` dan Project Constitution.
-* **Verifikasi:** Seluruh perbaikan algoritma divalidasi langsung melalui real golden fixtures (`acmic.html`, `momo.html`, `asv.html`), unit tests otomatis (`npm test`), dan TypeScript compiler checks (`tsc --noEmit`).
+* **Verifikasi:** Seluruh algoritma divalidasi langsung melalui real golden fixtures (`acmic.html`, `momo.html`, `asv.html`), unit tests otomatis (`npm test`), dan TypeScript compiler checks (`tsc --noEmit`).
