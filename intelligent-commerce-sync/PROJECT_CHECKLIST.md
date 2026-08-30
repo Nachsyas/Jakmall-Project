@@ -6,10 +6,10 @@ Last Audit:
 2026-08-30
 
 Current Phase:
-PHASE 3 — ONE-PRODUCT END-TO-END (STATE B CERTIFIED)
+PHASE 4A — PERSISTENCE FOUNDATION (CERTIFIED)
 
 Overall Status:
-PHASE 3 DONE [x] — STATE B: PLATFORM-ACCESS-LIMITED E2E
+PHASE 4A DONE [x] — PERSISTENCE FOUNDATION CERTIFIED
 
 ## EXECUTIVE SUMMARY
 
@@ -28,7 +28,9 @@ Phase 3 is completed under State B because legitimate live Shopee publication
 credentials / verified remote transport were not available during this phase.
 
 Next Recommended Task:
-Phase 4 — Persistence, job state, history, and continuous synchronization foundation.
+Phase 4B — Synchronization Domain: deterministic sync planner,
+state transitions, field-ownership-aware operation planning,
+review/block propagation, and audit decision modeling.
 
 ---
 
@@ -207,3 +209,137 @@ destination:
 destinationQuantity = 0
 policy = out_of_stock_zero
 status = resolved
+```
+
+---
+
+# PHASE 4 — PERSISTENCE & SYNCHRONIZATION FOUNDATION
+
+## PHASE 4 STRATEGY
+
+Phase 4A — Persistence Foundation: CERTIFIED
+Phase 4B — Synchronization Domain: NOT STARTED
+Phase 4C — Execution Infrastructure: NOT STARTED
+
+Phase 4A establishes persistence foundations only (relational schema, stable serialization, granular hashing, snapshot diffing, and domain types). Live database connectivity, applied migrations, repositories/workers, BullMQ, scheduler, continuous synchronization runtime, and remote marketplace operations are strictly not part of Phase 4A.
+
+---
+
+## PHASE 4A TASKS
+
+- [x] P0 Add PostgreSQL / Prisma persistence schema
+- [x] P0 Separate internal Product UUID from JakMall source identity
+- [x] P0 Persist ProductSource and source variant identity
+- [x] P0 Define historical SourceSnapshot model
+- [x] P0 Add deterministic stable serialization
+- [x] P0 Add SHA-256 source/content/price/inventory/variant hashes
+- [x] P0 Add deterministic field-group snapshot diff
+- [x] P0 Preserve unknown inventory vs confirmed zero semantics
+- [x] P0 Define MarketplaceListing persistence foundation
+- [x] P0 Define SyncJob / SyncEvent / AuditLog persistence foundation
+- [x] P0 Define persistence-level idempotency uniqueness foundation
+- [x] P0 Add persistence regression tests
+- [x] P1 Add Phase 4A architecture documentation
+- [x] P0 Pass Phase 4A Acceptance Gate
+
+---
+
+## PHASE 4A ACCEPTANCE GATE AUDIT — 40/40 PASS
+
+| # | Acceptance Gate Condition | Status | Evidence |
+|---|---|:---:|---|
+| 1 | Existing Phase 2/3 regression remains green | PASS | `tests/regression.test.ts` and `tests/shopee-builder.test.ts` pass |
+| 2 | Full automated test suite passes | PASS | `npm test` runs 90 tests with 90 pass, 0 fail |
+| 3 | TypeScript typecheck passes | PASS | `npm run typecheck` (`tsc --noEmit`) passes with 0 errors |
+| 4 | git diff --check passes | PASS | `git diff --check` passes with zero warnings |
+| 5 | Explicit any / as any count in src is zero | PASS | `grep -RInE '\bany\b|as any' src` returns 0 matches |
+| 6 | PostgreSQL remains authoritative database | PASS | `prisma/schema.prisma` declares `provider = "postgresql"` |
+| 7 | Prisma schema exists | PASS | Valid schema defined at `prisma/schema.prisma` with 10 models and 4 enums |
+| 8 | No SQLite persistence fallback introduced | PASS | No SQLite configuration, provider, or `.db` files introduced |
+| 9 | Product internal PK uses generated UUID | PASS | `Product.id` defined as `String @id @default(uuid())` |
+| 10 | JakMall sourceProductId remains separate from internal Product ID | PASS | Supplier ID stored in `ProductSource.sourceProductId` separate from internal UUID |
+| 11 | ProductSource enforces unique source + sourceProductId | PASS | `ProductSource` defines `@@unique([source, sourceProductId])` |
+| 12 | SourceVariant preserves sourceSkuId / merchantSku / displaySku | PASS | `SourceVariant` defines `sourceSkuId`, `merchantSku`, `displaySku`, `@@unique([productSourceId, sourceSkuId])` |
+| 13 | SourceSnapshot historical model exists | PASS | `SourceSnapshot` model defines `canonicalPayload Json`, timestamps, and 5 hashes |
+| 14 | sourceHash exists and uses SHA-256 | PASS | `computeSourceHash` generates SHA-256 hex composite digest |
+| 15 | contentHash exists | PASS | `computeContentHash` generates SHA-256 hex across content/editorial fields |
+| 16 | priceHash exists | PASS | `computePriceHash` generates SHA-256 hex across variant prices |
+| 17 | inventoryHash exists | PASS | `computeInventoryHash` generates SHA-256 hex across variant inventories |
+| 18 | variantHash exists | PASS | `computeVariantHash` generates SHA-256 hex across variant definition state |
+| 19 | Stable serialization deterministic across object insertion order | PASS | `tests/persistence-hash.test.ts` verifies key-order independent serialization |
+| 20 | Unsupported serializer values rejected | PASS | `stableSerialize` rejects `Map`, `Set`, `RegExp`, class instances, Symbol keys, non-finite numbers |
+| 21 | Sparse array handling deterministic | PASS | `stableSerialize` normalizes sparse array holes (`new Array(2)`) and explicit undefined to `[null,null]` |
+| 22 | fetchedAt-only changes do not create semantic change | PASS | `tests/persistence-hash.test.ts` and `tests/persistence-diff.test.ts` verify `NO_CHANGE` |
+| 23 | NO_CHANGE tested | PASS | `diffSnapshotHashes` returns `classification: "NO_CHANGE", changed: false` |
+| 24 | PRICE_CHANGED tested | PASS | `diffCanonicalSnapshots` returns `classification: "PRICE_CHANGED"` on price update |
+| 25 | INVENTORY_CHANGED tested | PASS | `diffCanonicalSnapshots` returns `classification: "INVENTORY_CHANGED"` on stock update |
+| 26 | CONTENT_CHANGED tested | PASS | `diffCanonicalSnapshots` returns `classification: "CONTENT_CHANGED"` on editorial update |
+| 27 | VARIANTS_CHANGED tested | PASS | `diffCanonicalSnapshots` returns `classification: "VARIANTS_CHANGED"` on attribute update |
+| 28 | SKU membership changes include VARIANTS_CHANGED | PASS | `tests/persistence-diff.test.ts` proves removing/adding SKU includes `VARIANTS_CHANGED` |
+| 29 | MULTIPLE_CHANGED preserves individual kinds | PASS | `diffCanonicalSnapshots` returns `MULTIPLE_CHANGED` and preserves all distinct kinds |
+| 30 | Unknown inventory distinct from quantity zero | PASS | `tests/persistence-hash.test.ts` proves `quantity: undefined` produces distinct hash from `quantity: 0` |
+| 31 | Variant image changes detected | PASS | `tests/persistence-hash.test.ts` proves variant image update alters `variantHash` and `sourceHash` |
+| 32 | Variant volume changes detected | PASS | `tests/persistence-hash.test.ts` proves variant volume update alters `variantHash` and `sourceHash` |
+| 33 | Hashing does not mutate CanonicalProduct | PASS | `tests/persistence-hash.test.ts` proves zero mutation of input CanonicalProduct |
+| 34 | Snapshot source identity mismatch rejected | PASS | `diffCanonicalSnapshots` throws `SnapshotIdentityMismatchError` on mismatched source identities |
+| 35 | Aggregate/component hash inconsistency rejected | PASS | `diffSnapshotHashes` throws `SnapshotIntegrityError` on inconsistent aggregate/component hashes |
+| 36 | Marketplace remote IDs nullable / not fabricated | PASS | `MarketplaceListing.remoteListingId` and `MarketplaceListingVariant.remoteVariantId` are nullable `String?` |
+| 37 | IdempotencyRecord.key persistence uniqueness exists | PASS | `IdempotencyRecord.key` defines `@unique` constraint in `prisma/schema.prisma` |
+| 38 | No Redis/BullMQ/scheduler/worker introduced | PASS | Phase 4A introduces zero queue, worker, or scheduler dependencies |
+| 39 | No remote marketplace mutation introduced | PASS | Phase 4A contains zero live remote marketplace transport or mutations |
+| 40 | Documentation says DB not connected and migration not applied | PASS | `docs/architecture/phase4-persistence-sync.md` and `PROJECT_MANIFEST.yaml` state truthful non-connected status |
+
+---
+
+## PHASE 4A FINAL VERIFIED EVIDENCE
+
+Date:
+2026-08-30
+
+Branch:
+phase4/persistence-sync
+
+Environment checkpoint:
+f0a7de7
+
+Implementation commit:
+1d4caa204c64fe35845ecb757e99f19b8e4ba69c
+
+npm test:
+PASS — 90/90
+
+npm run typecheck:
+PASS — 0 errors
+
+git diff --check:
+PASS
+
+Explicit any / as any:
+0 in src/
+
+Prisma:
+6.19.3
+
+Prisma schema:
+VALID
+
+Database:
+PostgreSQL
+
+PostgreSQL connected:
+NO
+
+Migration applied:
+NO
+
+Redis/BullMQ:
+NOT STARTED
+
+Continuous sync runtime:
+NOT STARTED
+
+Phase 4B planner:
+NOT STARTED
+
+Remote Shopee:
+NOT TOUCHED BY PHASE 4A
