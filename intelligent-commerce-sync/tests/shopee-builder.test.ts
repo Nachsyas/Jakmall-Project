@@ -1,12 +1,12 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { parseJakmallHtml } from "../src/jakmall/parser.js";
-import { normalizeToCanonical } from "../src/jakmall/normalizer.js";
-import { buildShopeeDraft, applyHumanReview } from "../src/marketplace/shopee/builder.js";
 import type { CanonicalProduct } from "../src/canonical/types.js";
+import { normalizeToCanonical } from "../src/jakmall/normalizer.js";
+import { parseJakmallHtml } from "../src/jakmall/parser.js";
+import { applyHumanReview, buildShopeeDraft } from "../src/marketplace/shopee/builder.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,7 +33,10 @@ test("buildShopeeDraft prepares ACMIC golden fixture into valid Shopee draft wit
   // Category is a semantic suggestion and requires human review or manual category ID
   assert.equal(draft.category.status, "needs_review");
   assert.equal(draft.category.targetCategoryId, undefined);
-  assert.equal(draft.category.targetCategoryName, "Aksesoris Handphone > Charger & Kabel > Kepala Charger");
+  assert.equal(
+    draft.category.targetCategoryName,
+    "Aksesoris Handphone > Charger & Kabel > Kepala Charger"
+  );
 
   // Verify Active SKU (5502951494118)
   const activeVar = draft.variants.find((v) => v.sourceSkuId === "5502951494118");
@@ -89,6 +92,7 @@ test("buildShopeeDraft strictly does NOT mutate input CanonicalProduct (Zero Sou
     canonicalSnapshot,
     "CanonicalProduct was mutated during Shopee draft build!"
   );
+
   assert.equal(canonical.variants[0]?.price.final, 379000, "Variant price was mutated");
   assert.equal(canonical.title, canonicalSnapshot.title, "Title was mutated");
 });
@@ -103,6 +107,7 @@ test("applyHumanReview manages review decisions and enforces category and stock 
 
   // 1. Unresolved category cannot be approved
   const draftUnresolvedCategory = buildShopeeDraft(canonical);
+
   assert.throws(
     () =>
       applyHumanReview(draftUnresolvedCategory, {
@@ -117,6 +122,7 @@ test("applyHumanReview manages review decisions and enforces category and stock 
   const draftResolved = buildShopeeDraft(canonical, {
     categoryOverrideId: "manual-charger-id",
   });
+
   assert.equal(draftResolved.category.status, "mapped");
 
   const approved = applyHumanReview(draftResolved, {
@@ -124,6 +130,7 @@ test("applyHumanReview manages review decisions and enforces category and stock 
     reviewedBy: "operator-1",
     reviewedAt: new Date(),
   });
+
   assert.equal(approved.status, "APPROVED_FOR_PUBLISH");
   assert.equal(approved.validation.canPublish, true);
   assert.equal(approved.validation.eligibleForApproval, false);
@@ -135,6 +142,7 @@ test("applyHumanReview manages review decisions and enforces category and stock 
     reviewedAt: new Date(),
     notes: "Declined by operator",
   });
+
   assert.equal(rejected.status, "REJECTED");
   assert.equal(rejected.validation.canPublish, false);
 
@@ -145,6 +153,7 @@ test("applyHumanReview manages review decisions and enforces category and stock 
     reviewedAt: new Date(),
     notes: "Fix title prefix",
   });
+
   assert.equal(editRequired.status, "EDIT_REQUIRED");
   assert.equal(editRequired.validation.canPublish, false);
 });
@@ -167,11 +176,79 @@ test("buildShopeeDraft does NOT invent 200g when weight is missing and emits MAR
   };
 
   const draft = buildShopeeDraft(unweightedCanonical);
-  assert.equal(draft.totalWeightGrams, undefined, "totalWeightGrams must remain undefined when missing from source");
-  assert.equal(draft.variants[0]?.weightGrams, undefined, "variant weightGrams must remain undefined");
+
+  assert.equal(
+    draft.totalWeightGrams,
+    undefined,
+    "totalWeightGrams must remain undefined when missing from source"
+  );
+
+  assert.equal(
+    draft.variants[0]?.weightGrams,
+    undefined,
+    "variant weightGrams must remain undefined"
+  );
+
   assert.ok(
     draft.validation.issues.some((i) => i.code === "MARKETPLACE_WEIGHT_REQUIRED"),
     "Must emit MARKETPLACE_WEIGHT_REQUIRED issue"
   );
+
   assert.equal(draft.validation.valid, false, "Draft without weight cannot be valid");
+});
+
+test("buildShopeeDraft propagates undisclosed block policy as publication blocker", () => {
+  const html = fs.readFileSync(path.join(fixturesDir, "acmic.html"), "utf-8");
+  const parsed = parseJakmallHtml(html);
+  const canonical = normalizeToCanonical(
+    parsed,
+    "https://www.jakmall.com/acmic-official-store/acmic-cpd65-gan-65w-super-fast-charging-65-w-charger-pd-power-adapter#5502951494118"
+  );
+
+  const controlledCanonical: CanonicalProduct = {
+    ...canonical,
+    variants: canonical.variants.map((variant, index) =>
+      index === 0
+        ? {
+          ...variant,
+          inventory: {
+            available: true,
+            exact: false,
+            quantity: undefined,
+            status: "in_stock",
+          },
+        }
+        : {
+          ...variant,
+        }
+    ),
+  };
+
+  const draft = buildShopeeDraft(controlledCanonical, {
+    undisclosedStockPolicy: "block",
+  });
+
+  const blockedVariant = draft.variants[0];
+  assert.ok(blockedVariant);
+
+  assert.equal(blockedVariant.inventory.sourceAvailable, true);
+  assert.equal(blockedVariant.inventory.sourceExact, false);
+  assert.equal(blockedVariant.inventory.sourceQuantity, undefined);
+  assert.equal(blockedVariant.inventory.destinationQuantity, undefined);
+  assert.equal(blockedVariant.inventory.destinationStock, undefined);
+  assert.equal(blockedVariant.inventory.policy, "undisclosed_blocked");
+  assert.equal(blockedVariant.inventory.status, "blocked");
+  assert.equal(blockedVariant.inventory.publishable, false);
+  assert.equal(blockedVariant.status, "BLOCKED");
+
+  assert.ok(
+    draft.validation.issues.some(
+      (issue) => issue.code === "MARKETPLACE_STOCK_POLICY_BLOCKED"
+    )
+  );
+
+  assert.ok(draft.validation.blockerCount > 0);
+  assert.equal(draft.validation.validationReady, false);
+  assert.equal(draft.validation.canPublish, false);
+  assert.equal(draft.status, "BLOCKED");
 });

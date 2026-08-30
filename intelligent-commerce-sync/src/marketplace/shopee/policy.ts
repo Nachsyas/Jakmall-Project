@@ -1,5 +1,5 @@
 import type { CanonicalVariantInventory } from "../../canonical/types.js";
-import type { ShopeePricingDraft, ShopeeInventoryDraft } from "./types.js";
+import type { ShopeeInventoryDraft, ShopeePricingDraft } from "./types.js";
 
 export class ShopeePolicyError extends Error {
   constructor(message: string, public readonly code: string) {
@@ -94,14 +94,14 @@ export interface InventoryPolicyOptions {
 
 /**
  * Maps CanonicalVariantInventory to ShopeeInventoryDraft strictly preserving source reality.
- * 
+ *
  * Rules:
  * - available === false (or quantity === 0): destination stock = 0, status = "out_of_stock_zero"
  * - available === true && exact === true: destination stock = quantity, status = "exact_passthrough"
  * - available === true && exact === false (undisclosed):
- *     - "needs_review" (default): destination stock = 0, publishable = false
- *     - "safety_stock_fixed": destination stock = safetyStock, publishable = true
- *     - "block": destination stock = 0, publishable = false
+ *     - "needs_review" (default): destination stock remains undefined, publishable = false
+ *     - "safety_stock_fixed": destination stock = explicitly configured safetyStock, publishable = true
+ *     - "block": destination stock remains undefined, status = "blocked", publishable = false
  * - available === null (UNKNOWN/incomplete): BLOCKED immediately, publishable = false
  */
 export function calculateShopeeInventory(
@@ -189,6 +189,7 @@ export function calculateShopeeInventory(
           "MARKETPLACE_STOCK_POLICY_REQUIRED"
         );
       }
+
       const allocated = options.safetyStock;
       return {
         sourceAvailable: true,
@@ -200,6 +201,20 @@ export function calculateShopeeInventory(
         policyApplied: "configured_safety_stock",
         status: "resolved",
         publishable: true,
+      };
+    }
+
+    if (policy === "block") {
+      return {
+        sourceAvailable: true,
+        sourceExact: false,
+        sourceQuantity: undefined,
+        destinationQuantity: undefined,
+        destinationStock: undefined,
+        policy: "undisclosed_blocked",
+        policyApplied: "undisclosed_blocked",
+        status: "blocked",
+        publishable: false,
       };
     }
 

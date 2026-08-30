@@ -1,11 +1,11 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
+import type { CanonicalVariantInventory } from "../src/canonical/types.js";
 import {
-  calculateShopeePrice,
   calculateShopeeInventory,
+  calculateShopeePrice,
   ShopeePolicyError,
 } from "../src/marketplace/shopee/policy.js";
-import type { CanonicalVariantInventory } from "../src/canonical/types.js";
 
 test("calculateShopeePrice applies percentage markup with deterministic ceiling rounding", () => {
   // ACMIC active SKU: Rp379.000 + 20% = Rp454.800 -> rounded to nearest 1.000 = Rp455.000
@@ -133,6 +133,29 @@ test("calculateShopeeInventory handles undisclosed quantity safely without fabri
   assert.equal(safetyStockResult.publishable, true);
 });
 
+test("undisclosed stock with block policy is blocked without inventing quantity", () => {
+  const invUndisclosed: CanonicalVariantInventory = {
+    available: true,
+    exact: false,
+    quantity: undefined,
+    status: "in_stock",
+  };
+
+  const result = calculateShopeeInventory(invUndisclosed, {
+    undisclosedStockPolicy: "block",
+  });
+
+  assert.equal(result.sourceAvailable, true);
+  assert.equal(result.sourceExact, false);
+  assert.equal(result.sourceQuantity, undefined);
+  assert.equal(result.destinationQuantity, undefined);
+  assert.equal(result.destinationStock, undefined);
+  assert.equal(result.policy, "undisclosed_blocked");
+  assert.equal(result.policyApplied, "undisclosed_blocked");
+  assert.equal(result.status, "blocked");
+  assert.equal(result.publishable, false);
+});
+
 test("calculateShopeeInventory strictly blocks UNKNOWN inventory without fabricating zero", () => {
   const invUnknown: CanonicalVariantInventory = {
     available: null,
@@ -177,6 +200,7 @@ test("safety_stock_fixed without explicit safetyStock is rejected and never defa
     (err: unknown) =>
       err instanceof ShopeePolicyError && err.code === "MARKETPLACE_STOCK_POLICY_REQUIRED"
   );
+
   assert.throws(
     () =>
       calculateShopeeInventory(invUndisclosed, {
@@ -197,7 +221,12 @@ test("exact stock without quantity is treated as inconsistent blocked state and 
   };
 
   const result = calculateShopeeInventory(invInconsistent);
-  assert.equal(result.destinationQuantity, undefined, "Must NOT fabricate 0 for missing exact quantity");
+
+  assert.equal(
+    result.destinationQuantity,
+    undefined,
+    "Must NOT fabricate 0 for missing exact quantity"
+  );
   assert.equal(result.destinationStock, undefined);
   assert.equal(result.status, "blocked");
   assert.equal(result.policy, "inconsistent_stock_blocked");

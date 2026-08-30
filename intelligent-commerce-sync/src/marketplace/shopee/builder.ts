@@ -1,23 +1,23 @@
 import type { CanonicalProduct } from "../../canonical/types.js";
 import type {
-  ShopeeListingDraft,
-  ShopeeVariantDraft,
-  ShopeeInventoryDraft,
-  ShopeeImageDraft,
-  ShopeePreparationConfig,
-} from "./types.js";
-import type {
+  HumanReviewRecord,
   MarketplaceValidationIssue,
   MarketplaceValidationResult,
-  HumanReviewRecord,
 } from "../types.js";
 import { formatIdempotencyKey } from "../types.js";
-import { calculateShopeePrice, calculateShopeeInventory, ShopeePolicyError } from "./policy.js";
-import { mapShopeeCategory, mapShopeeAttributes } from "./mapper.js";
+import { mapShopeeAttributes, mapShopeeCategory } from "./mapper.js";
+import { calculateShopeeInventory, calculateShopeePrice, ShopeePolicyError } from "./policy.js";
+import type {
+  ShopeeImageDraft,
+  ShopeeInventoryDraft,
+  ShopeeListingDraft,
+  ShopeePreparationConfig,
+  ShopeeVariantDraft,
+} from "./types.js";
 
 /**
  * Prepares and validates a complete Shopee listing draft from a CanonicalProduct.
- * 
+ *
  * Guarantees:
  * 1. ZERO mutation of the input CanonicalProduct and its inner objects.
  * 2. Deterministic title sanitization and length compliance (local configurable rule default: 120 chars).
@@ -206,9 +206,16 @@ export function buildShopeeDraft(
         code:
           inventoryResult.policy === "inconsistent_stock_blocked"
             ? "MARKETPLACE_STOCK_INCONSISTENT"
-            : "MARKETPLACE_STOCK_UNKNOWN",
+            : inventoryResult.policy === "undisclosed_blocked"
+              ? "MARKETPLACE_STOCK_POLICY_BLOCKED"
+              : "MARKETPLACE_STOCK_UNKNOWN",
         field: `variants[${idx}].inventory`,
-        message: `Variant ${v.sourceSkuId} has invalid or incomplete stock in source and cannot be published`,
+        message:
+          inventoryResult.policy === "inconsistent_stock_blocked"
+            ? `Variant ${v.sourceSkuId} reports exact stock but does not provide a valid quantity`
+            : inventoryResult.policy === "undisclosed_blocked"
+              ? `Variant ${v.sourceSkuId} has undisclosed source quantity and the configured inventory policy blocks publication`
+              : `Variant ${v.sourceSkuId} has invalid or incomplete stock in source and cannot be published`,
         severity: "BLOCKER",
       });
     } else if (inventoryResult.status === "needs_review") {
@@ -271,6 +278,7 @@ export function buildShopeeDraft(
   const warningCount = issues.filter((i) => i.severity === "WARNING").length;
   const validationReady = blockerCount === 0;
   const eligibleForApproval = validationReady;
+
   // canPublish is strictly false until human review decision APPROVE is recorded AND all fields resolved
   const canPublish = false;
 
@@ -329,7 +337,7 @@ export function buildShopeeDraft(
 
 /**
  * Applies a human operator's review decision to a Shopee draft.
- * 
+ *
  * Rules:
  * - A draft with active BLOCKER issues cannot be approved.
  * - An approved draft can only reach canPublish: true if:
@@ -357,6 +365,7 @@ export function applyHumanReview(
     const unresolvedInventory = draft.variants.some(
       (v) => v.inventory.destinationQuantity === undefined
     );
+
     if (unresolvedInventory) {
       throw new Error(
         "Cannot approve draft for publication with unresolved inventory quantities. Please configure safety stock or review variants."

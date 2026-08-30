@@ -1,9 +1,8 @@
 import type {
-  MarketplaceListingDraft,
-  MarketplaceValidationResult,
-  MarketplaceValidationIssue,
   HumanReviewRecord,
+  MarketplaceListingDraft,
   MarketplacePreparationConfig,
+  MarketplaceValidationResult
 } from "../types.js";
 
 /**
@@ -20,12 +19,14 @@ export interface ShopeePricingDraft {
 
 /**
  * Inventory policy details for a Shopee variant.
- * 
+ *
  * Truthful semantics:
  * - Confirmed OOS: destinationQuantity = 0, status = "resolved"
  * - Confirmed exact stock N: destinationQuantity = N, status = "resolved"
  * - Undisclosed source stock: destinationQuantity = undefined, status = "needs_review"
  *   (or destinationQuantity = N, status = "resolved" if explicit seller safety stock configured)
+ * - Undisclosed source stock with explicit block policy:
+ *   destinationQuantity = undefined, status = "blocked"
  * - UNKNOWN source stock (available === null): destinationQuantity = undefined, status = "blocked"
  */
 export interface ShopeeInventoryDraft {
@@ -35,12 +36,13 @@ export interface ShopeeInventoryDraft {
   destinationQuantity?: number | undefined;
   destinationStock?: number | undefined; // Backward-compatible alias for destinationQuantity
   policy:
-    | "exact_passthrough"
-    | "out_of_stock_zero"
-    | "configured_safety_stock"
-    | "undisclosed_needs_review"
-    | "unknown_blocked"
-    | "inconsistent_stock_blocked";
+  | "exact_passthrough"
+  | "out_of_stock_zero"
+  | "configured_safety_stock"
+  | "undisclosed_needs_review"
+  | "undisclosed_blocked"
+  | "unknown_blocked"
+  | "inconsistent_stock_blocked";
   policyApplied: string; // Backward-compatible string alias for policy
   status: "resolved" | "needs_review" | "blocked";
   publishable: boolean;
@@ -74,7 +76,7 @@ export interface ShopeeImageDraft {
 
 /**
  * Category mapping result for Shopee.
- * 
+ *
  * States:
  * - "mapped": targetCategoryId exists from verified source or manual override.
  * - "needs_review": semantic suggestion exists, but numeric destination category ID is unresolved.
