@@ -148,3 +148,58 @@ test("calculateShopeeInventory strictly blocks UNKNOWN inventory without fabrica
   assert.equal(result.status, "blocked");
   assert.equal(result.publishable, false);
 });
+
+test("safety_stock_fixed without explicit safetyStock is rejected and never defaults to 5", () => {
+  const invUndisclosed: CanonicalVariantInventory = {
+    available: true,
+    exact: false,
+    quantity: undefined,
+    status: "in_stock",
+  };
+
+  // Missing safetyStock must throw ShopeePolicyError and never silently default to 5
+  assert.throws(
+    () =>
+      calculateShopeeInventory(invUndisclosed, {
+        undisclosedStockPolicy: "safety_stock_fixed",
+      }),
+    (err: unknown) =>
+      err instanceof ShopeePolicyError && err.code === "MARKETPLACE_STOCK_POLICY_REQUIRED"
+  );
+
+  // Non-positive or invalid safetyStock must also be rejected
+  assert.throws(
+    () =>
+      calculateShopeeInventory(invUndisclosed, {
+        undisclosedStockPolicy: "safety_stock_fixed",
+        safetyStock: 0,
+      }),
+    (err: unknown) =>
+      err instanceof ShopeePolicyError && err.code === "MARKETPLACE_STOCK_POLICY_REQUIRED"
+  );
+  assert.throws(
+    () =>
+      calculateShopeeInventory(invUndisclosed, {
+        undisclosedStockPolicy: "safety_stock_fixed",
+        safetyStock: -3,
+      }),
+    (err: unknown) =>
+      err instanceof ShopeePolicyError && err.code === "MARKETPLACE_STOCK_POLICY_REQUIRED"
+  );
+});
+
+test("exact stock without quantity is treated as inconsistent blocked state and never becomes zero", () => {
+  const invInconsistent: CanonicalVariantInventory = {
+    available: true,
+    exact: true,
+    quantity: undefined,
+    status: "in_stock",
+  };
+
+  const result = calculateShopeeInventory(invInconsistent);
+  assert.equal(result.destinationQuantity, undefined, "Must NOT fabricate 0 for missing exact quantity");
+  assert.equal(result.destinationStock, undefined);
+  assert.equal(result.status, "blocked");
+  assert.equal(result.policy, "inconsistent_stock_blocked");
+  assert.equal(result.publishable, false);
+});

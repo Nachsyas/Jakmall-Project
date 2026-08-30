@@ -153,11 +153,11 @@ Phase 3 Initiation: Define MarketplaceAdapter contract & Shopee Product Strategy
 - [x] P0 Add comprehensive test suite covering price, stock, category, draft builder, adapter, verifier, and zero source mutation
 - [x] P1 Document environment configuration in `.env.example` (names only, no secrets)
 - [x] P1 Update `docs/project-status.md`, `README.md`, and `PROJECT_MANIFEST.yaml` based on verified truth
-- [x] P0 Pass Phase 3 Acceptance Gate (30/30 conditions)
+- [x] P0 Phase 3 State B Acceptance Gate: 29 PASS + 1 NOT_APPLICABLE_STATE_B
 
 ---
 
-## PHASE 3 ACCEPTANCE GATE AUDIT (STATE B: 29 PASS / 1 NOT_APPLICABLE_STATE_B)
+## PHASE 3 STATE B ACCEPTANCE GATE AUDIT (29 PASS + 1 NOT_APPLICABLE_STATE_B)
 
 | # | Acceptance Gate Condition | Status | Evidence |
 |---|---------------------------|:------:|----------|

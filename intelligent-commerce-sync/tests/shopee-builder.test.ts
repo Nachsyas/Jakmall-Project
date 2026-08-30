@@ -148,3 +148,30 @@ test("applyHumanReview manages review decisions and enforces category and stock 
   assert.equal(editRequired.status, "EDIT_REQUIRED");
   assert.equal(editRequired.validation.canPublish, false);
 });
+
+test("buildShopeeDraft does NOT invent 200g when weight is missing and emits MARKETPLACE_WEIGHT_REQUIRED", () => {
+  const html = fs.readFileSync(path.join(fixturesDir, "acmic.html"), "utf-8");
+  const parsed = parseJakmallHtml(html);
+  const canonical = normalizeToCanonical(
+    parsed,
+    "https://www.jakmall.com/acmic-official-store/acmic-cpd65-gan-65w-super-fast-charging-65-w-charger-pd-power-adapter#5502951494118"
+  );
+
+  // Clone and delete weight from canonical variants
+  const unweightedCanonical: CanonicalProduct = {
+    ...canonical,
+    variants: canonical.variants.map((v) => ({
+      ...v,
+      weightGrams: undefined,
+    })),
+  };
+
+  const draft = buildShopeeDraft(unweightedCanonical);
+  assert.equal(draft.totalWeightGrams, undefined, "totalWeightGrams must remain undefined when missing from source");
+  assert.equal(draft.variants[0]?.weightGrams, undefined, "variant weightGrams must remain undefined");
+  assert.ok(
+    draft.validation.issues.some((i) => i.code === "MARKETPLACE_WEIGHT_REQUIRED"),
+    "Must emit MARKETPLACE_WEIGHT_REQUIRED issue"
+  );
+  assert.equal(draft.validation.valid, false, "Draft without weight cannot be valid");
+});

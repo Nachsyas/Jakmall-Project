@@ -39,7 +39,8 @@ export interface ShopeeInventoryDraft {
     | "out_of_stock_zero"
     | "configured_safety_stock"
     | "undisclosed_needs_review"
-    | "unknown_blocked";
+    | "unknown_blocked"
+    | "inconsistent_stock_blocked";
   policyApplied: string; // Backward-compatible string alias for policy
   status: "resolved" | "needs_review" | "blocked";
   publishable: boolean;
@@ -57,7 +58,7 @@ export interface ShopeeVariantDraft {
   tierIndex: number;
   pricing: ShopeePricingDraft;
   inventory: ShopeeInventoryDraft;
-  weightGrams: number;
+  weightGrams?: number | undefined;
   status: "ACTIVE" | "OUT_OF_STOCK" | "BLOCKED" | "NEEDS_REVIEW";
 }
 
@@ -108,8 +109,8 @@ export interface ShopeePreparationConfig extends MarketplacePreparationConfig {
   sellerAccountKey?: string | undefined; // e.g. "local-demo-shop"
   logisticsChannelIds?: number[] | undefined;
   titlePrefix?: string | undefined;
-  maxTitleLength?: number | undefined; // Shopee standard is 120 chars
-  minDescriptionLength?: number | undefined; // Shopee standard is 100 chars
+  maxTitleLength?: number | undefined; // Local configurable preparation rule default: 120
+  minDescriptionLength?: number | undefined; // Local configurable preparation rule default: 100
 }
 
 /**
@@ -139,7 +140,7 @@ export interface ShopeeListingDraft extends MarketplaceListingDraft {
   attributes: ShopeeAttributeMapping[];
   variants: ShopeeVariantDraft[];
   images: ShopeeImageDraft[];
-  totalWeightGrams: number;
+  totalWeightGrams?: number | undefined;
 
   // Review & Validation
   validation: MarketplaceValidationResult;

@@ -85,6 +85,7 @@ test("ShopeeListingVerifier handles dry-run operations cleanly with NOT_APPLICAB
     marketplace: "shopee",
     preparedAt: new Date(),
     idempotencyKey: "key-1",
+    preparedOperation: {},
     simulatedPayload: {},
   };
 
@@ -185,4 +186,45 @@ test("ShopeeListingVerifier returns VERIFY_NOT_FOUND when listing missing in mar
 
   const result = await verifier.verify(publishSuccess, getMinimalDraft());
   assert.equal(result.status, "VERIFY_NOT_FOUND");
+});
+
+test("ShopeeListingVerifier registers mismatch when expected stock is unresolved and never defaults to 0", async () => {
+  const draft = getMinimalDraft();
+  draft.variants[0]!.inventory.destinationQuantity = undefined;
+  draft.variants[0]!.inventory.destinationStock = undefined;
+
+  const mockRemoteState: RemoteShopeeListingState = {
+    itemId: "remote-item-1",
+    title: draft.preparedTitle,
+    status: "NORMAL",
+    variants: [
+      {
+        variationSku: "SKU-PRO",
+        price: 455000,
+        stock: 0, // Remote has 0, but expected is undefined; must never consider this matched
+      },
+    ],
+  };
+
+  const mockReader: ShopeeRemoteReader = {
+    async fetchListingState() {
+      return mockRemoteState;
+    },
+  };
+
+  const verifier = new ShopeeListingVerifier(mockReader);
+  const publishSuccess: MarketplacePublishResult = {
+    status: "PUBLISHED",
+    mode: "publish",
+    marketplace: "shopee",
+    marketplaceListingId: "remote-item-1",
+    publishedAt: new Date(),
+    idempotencyKey: "key-1",
+  };
+
+  const result = await verifier.verify(publishSuccess, draft);
+  assert.equal(result.status, "VERIFY_MISMATCH");
+  const stockMismatch = result.mismatches.find((m) => m.field.includes("stock"));
+  assert.ok(stockMismatch);
+  assert.ok(stockMismatch.message.includes("unresolved (undefined)"));
 });

@@ -2,6 +2,7 @@ import type { CanonicalProduct } from "../../canonical/types.js";
 import type {
   ShopeeListingDraft,
   ShopeeVariantDraft,
+  ShopeeInventoryDraft,
   ShopeeImageDraft,
   ShopeePreparationConfig,
 } from "./types.js";
@@ -11,7 +12,7 @@ import type {
   HumanReviewRecord,
 } from "../types.js";
 import { formatIdempotencyKey } from "../types.js";
-import { calculateShopeePrice, calculateShopeeInventory } from "./policy.js";
+import { calculateShopeePrice, calculateShopeeInventory, ShopeePolicyError } from "./policy.js";
 import { mapShopeeCategory, mapShopeeAttributes } from "./mapper.js";
 
 /**
@@ -19,7 +20,7 @@ import { mapShopeeCategory, mapShopeeAttributes } from "./mapper.js";
  * 
  * Guarantees:
  * 1. ZERO mutation of the input CanonicalProduct and its inner objects.
- * 2. Deterministic title sanitization and length compliance (max 120 chars for Shopee).
+ * 2. Deterministic title sanitization and length compliance (local configurable rule default: 120 chars).
  * 3. Never fabricates "No Brand" or unverified numeric category IDs.
  * 4. Separate validationReady, eligibleForApproval, and canPublish semantics.
  *    (canPublish is ALWAYS false until explicit human APPROVE with resolved category and stock).
@@ -170,16 +171,44 @@ export function buildShopeeDraft(
     }
 
     // Stock Policy
-    const inventoryResult = calculateShopeeInventory(v.inventory, {
-      safetyStock: config.safetyStock,
-      undisclosedStockPolicy: config.undisclosedStockPolicy,
-    });
+    let inventoryResult: ShopeeInventoryDraft;
+    try {
+      inventoryResult = calculateShopeeInventory(v.inventory, {
+        safetyStock: config.safetyStock,
+        undisclosedStockPolicy: config.undisclosedStockPolicy,
+      });
+    } catch (err) {
+      if (err instanceof ShopeePolicyError) {
+        issues.push({
+          code: err.code,
+          field: `variants[${idx}].inventory`,
+          message: err.message,
+          severity: "BLOCKER",
+        });
+        inventoryResult = {
+          sourceAvailable: v.inventory.available,
+          sourceExact: v.inventory.exact,
+          sourceQuantity: v.inventory.quantity,
+          destinationQuantity: undefined,
+          destinationStock: undefined,
+          policy: "unknown_blocked",
+          policyApplied: "unknown_blocked",
+          status: "blocked",
+          publishable: false,
+        };
+      } else {
+        throw err;
+      }
+    }
 
     if (inventoryResult.status === "blocked") {
       issues.push({
-        code: "MARKETPLACE_STOCK_UNKNOWN",
+        code:
+          inventoryResult.policy === "inconsistent_stock_blocked"
+            ? "MARKETPLACE_STOCK_INCONSISTENT"
+            : "MARKETPLACE_STOCK_UNKNOWN",
         field: `variants[${idx}].inventory`,
-        message: `Variant ${v.sourceSkuId} has UNKNOWN stock in source and cannot be published`,
+        message: `Variant ${v.sourceSkuId} has invalid or incomplete stock in source and cannot be published`,
         severity: "BLOCKER",
       });
     } else if (inventoryResult.status === "needs_review") {
@@ -191,8 +220,17 @@ export function buildShopeeDraft(
       });
     }
 
-    const weightGrams = v.weightGrams ?? 200;
-    if (weightGrams > maxWeight) maxWeight = weightGrams;
+    const weightGrams = typeof v.weightGrams === "number" && v.weightGrams > 0 ? v.weightGrams : undefined;
+    if (weightGrams === undefined) {
+      issues.push({
+        code: "MARKETPLACE_WEIGHT_REQUIRED",
+        field: `variants[${idx}].weightGrams`,
+        message: `Variant ${v.sourceSkuId} has no source weight specified; destination weight is required`,
+        severity: "BLOCKER",
+      });
+    } else if (weightGrams > maxWeight) {
+      maxWeight = weightGrams;
+    }
 
     let varStatus: ShopeeVariantDraft["status"] = "ACTIVE";
     if (inventoryResult.destinationQuantity === 0) {
@@ -281,7 +319,7 @@ export function buildShopeeDraft(
     attributes,
     variants: variantDrafts,
     images: imageDrafts,
-    totalWeightGrams: maxWeight > 0 ? maxWeight : 200,
+    totalWeightGrams: maxWeight > 0 ? maxWeight : undefined,
     status: draftStatus,
     validation,
     idempotencyKey,

@@ -109,7 +109,6 @@ export function calculateShopeeInventory(
   options: InventoryPolicyOptions = {}
 ): ShopeeInventoryDraft {
   const policy = options.undisclosedStockPolicy ?? "needs_review";
-  const safetyStock = options.safetyStock ?? 5;
 
   // Case D: UNKNOWN / Incomplete source inventory
   if (inventory.available === null) {
@@ -143,7 +142,25 @@ export function calculateShopeeInventory(
 
   // Case B: Confirmed in-stock with EXACT integer quantity
   if (inventory.available === true && inventory.exact === true) {
-    const qty = inventory.quantity ?? 0;
+    if (
+      inventory.quantity === undefined ||
+      typeof inventory.quantity !== "number" ||
+      isNaN(inventory.quantity)
+    ) {
+      return {
+        sourceAvailable: true,
+        sourceExact: true,
+        sourceQuantity: undefined,
+        destinationQuantity: undefined,
+        destinationStock: undefined,
+        policy: "inconsistent_stock_blocked",
+        policyApplied: "inconsistent_stock_blocked",
+        status: "blocked",
+        publishable: false,
+      };
+    }
+
+    const qty = inventory.quantity;
     return {
       sourceAvailable: true,
       sourceExact: true,
@@ -160,7 +177,19 @@ export function calculateShopeeInventory(
   // Case C: Confirmed in-stock with UNDISCLOSED quantity
   if (inventory.available === true && inventory.exact === false) {
     if (policy === "safety_stock_fixed") {
-      const allocated = Math.max(1, safetyStock);
+      if (
+        options.safetyStock === undefined ||
+        typeof options.safetyStock !== "number" ||
+        isNaN(options.safetyStock) ||
+        options.safetyStock <= 0 ||
+        !Number.isInteger(options.safetyStock)
+      ) {
+        throw new ShopeePolicyError(
+          "Safety stock value must be an explicitly configured positive integer when undisclosedStockPolicy is 'safety_stock_fixed'",
+          "MARKETPLACE_STOCK_POLICY_REQUIRED"
+        );
+      }
+      const allocated = options.safetyStock;
       return {
         sourceAvailable: true,
         sourceExact: false,

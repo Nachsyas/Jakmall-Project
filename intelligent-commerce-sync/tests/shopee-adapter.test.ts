@@ -42,8 +42,8 @@ test("ShopeeMarketplaceAdapter dry_run mode generates simulated payload without 
   assert.equal(result.status, "DRY_RUN_COMPLETED");
   assert.equal(result.mode, "dry_run");
   assert.equal(transportCalls, 0, "dry_run must never perform remote calls");
-  assert.ok(result.simulatedPayload);
-  assert.equal(result.simulatedPayload["item_name"], draft.preparedTitle);
+  assert.ok(result.preparedOperation);
+  assert.equal(result.preparedOperation["title"], draft.preparedTitle);
 });
 
 test("ShopeeMarketplaceAdapter publish mode blocks when credentials are missing", async () => {
@@ -120,4 +120,30 @@ test("ShopeeMarketplaceAdapter publish mode blocks when destination category is 
   const result = await adapter.publishListing(draft, "publish");
   assert.equal(result.status, "BLOCKED_BY_VALIDATION");
   assert.equal(result.blockers[0]?.code, "MARKETPLACE_CATEGORY_UNRESOLVED");
+});
+
+test("publish mode with transport but no credentials returns BLOCKED_BY_CREDENTIALS and never executes transport", async () => {
+  delete process.env.SHOPEE_PARTNER_KEY;
+  delete process.env.SHOPEE_SHOP_ID;
+
+  let transportCalls = 0;
+  const mockTransport: ShopeeTransport = {
+    async publishItem() {
+      transportCalls++;
+      return { itemId: "should-not-reach" };
+    },
+  };
+
+  const adapter = new ShopeeMarketplaceAdapter(undefined, mockTransport); // Transport provided, but NO credentials
+  const draft = getAcmicDraft("manual-cat-override-99");
+  const approvedDraft = applyHumanReview(draft, {
+    decision: "APPROVE",
+    reviewedBy: "operator-1",
+    reviewedAt: new Date(),
+  });
+
+  const result = await adapter.publishListing(approvedDraft, "publish");
+
+  assert.equal(result.status, "BLOCKED_BY_CREDENTIALS");
+  assert.equal(transportCalls, 0, "Transport must NOT execute without credentials");
 });

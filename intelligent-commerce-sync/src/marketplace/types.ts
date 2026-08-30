@@ -117,7 +117,8 @@ export interface MarketplacePublishDryRun {
   simulatedListingId?: string | undefined;
   preparedAt: Date;
   idempotencyKey: string;
-  simulatedPayload: Record<string, unknown>;
+  preparedOperation: Record<string, unknown>;
+  simulatedPayload?: Record<string, unknown> | undefined;
 }
 
 export interface MarketplacePublishBlocked {

@@ -141,8 +141,17 @@ export class ShopeeListingVerifier {
           });
         }
 
-        const expectedStock = expectedVar.inventory.destinationQuantity ?? expectedVar.inventory.destinationStock ?? 0;
-        if (remoteVar.stock !== expectedStock) {
+        const expectedStock =
+          expectedVar.inventory.destinationQuantity ?? expectedVar.inventory.destinationStock;
+
+        if (expectedStock === undefined) {
+          mismatches.push({
+            field: `variants[${expectedVar.shopeeVariationSku}].stock`,
+            expected: null,
+            actual: remoteVar.stock,
+            message: `Invalid draft for verification: expected stock for SKU "${expectedVar.shopeeVariationSku}" is unresolved (undefined)`,
+          });
+        } else if (remoteVar.stock !== expectedStock) {
           mismatches.push({
             field: `variants[${expectedVar.shopeeVariationSku}].stock`,
             expected: expectedStock,

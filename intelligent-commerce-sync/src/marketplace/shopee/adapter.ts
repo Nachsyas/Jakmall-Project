@@ -74,23 +74,22 @@ export class ShopeeMarketplaceAdapter implements MarketplaceAdapter<ShopeeListin
         };
       }
 
-      // Generate simulated Shopee API payload structure
-      const simulatedPayload: Record<string, unknown> = {
-        item_name: draft.preparedTitle,
+      // Generate internal prepared marketplace operation
+      const preparedOperation: Record<string, unknown> = {
+        title: draft.preparedTitle,
         description: draft.preparedDescription,
-        category_id: draft.category.targetCategoryId ? Number(draft.category.targetCategoryId) : undefined,
-        category_name_suggestion: draft.category.targetCategoryName,
+        category: {
+          targetCategoryId: draft.category.targetCategoryId,
+          suggestion: draft.category.targetCategoryName,
+        },
         brand: draft.brand,
-        weight: draft.totalWeightGrams / 1000, // Shopee API takes kg
-        tier_variation: draft.variants.map((v) => ({
-          name: Object.keys(v.attributes).join(" - ") || "Varian",
-          options: Object.values(v.attributes),
-        })),
-        model: draft.variants.map((v) => ({
-          tier_index: [v.tierIndex],
-          normal_price: v.pricing.finalSellingPrice,
-          stock: v.inventory.destinationQuantity,
-          model_sku: v.shopeeVariationSku,
+        weightGrams: draft.totalWeightGrams,
+        variants: draft.variants.map((v) => ({
+          sourceSkuId: v.sourceSkuId,
+          destinationSku: v.shopeeVariationSku,
+          attributes: v.attributes,
+          sellingPriceIdr: v.pricing.finalSellingPrice,
+          destinationQuantity: v.inventory.destinationQuantity,
         })),
         images: draft.images.filter((img) => img.valid).map((img) => ({ url: img.sourceUrl })),
       };
@@ -102,7 +101,8 @@ export class ShopeeMarketplaceAdapter implements MarketplaceAdapter<ShopeeListin
         simulatedListingId: `sim-shopee-${draft.sourceProductId}`,
         preparedAt: new Date(),
         idempotencyKey: draft.idempotencyKey,
-        simulatedPayload,
+        preparedOperation,
+        simulatedPayload: preparedOperation,
       };
     }
 
@@ -162,9 +162,9 @@ export class ShopeeMarketplaceAdapter implements MarketplaceAdapter<ShopeeListin
       };
     }
 
-    // Gate D: Credentials Check (Never fabricate credentials)
+    // Gate D: Credentials Check (Never bypass credentials even if transport is provided)
     const creds = this.resolveCredentials();
-    if (!creds && !this.transport) {
+    if (!creds) {
       return {
         status: "BLOCKED_BY_CREDENTIALS",
         mode: "publish",
@@ -186,21 +186,26 @@ export class ShopeeMarketplaceAdapter implements MarketplaceAdapter<ShopeeListin
     // Gate E: Execution via Authorized Transport (e.g. In test context or live partner SDK)
     if (this.transport) {
       try {
-        const payload: Record<string, unknown> = {
-          item_name: draft.preparedTitle,
+        const internalPreparedPayload: Record<string, unknown> = {
+          title: draft.preparedTitle,
           description: draft.preparedDescription,
-          category_id: Number(draft.category.targetCategoryId) || 0,
+          category: {
+            targetCategoryId: draft.category.targetCategoryId,
+            suggestion: draft.category.targetCategoryName,
+          },
           brand: draft.brand,
-          weight: draft.totalWeightGrams / 1000,
-          model: draft.variants.map((v) => ({
-            tier_index: [v.tierIndex],
-            normal_price: v.pricing.finalSellingPrice,
-            stock: v.inventory.destinationQuantity ?? 0,
-            model_sku: v.shopeeVariationSku,
+          weightGrams: draft.totalWeightGrams,
+          variants: draft.variants.map((v) => ({
+            sourceSkuId: v.sourceSkuId,
+            destinationSku: v.shopeeVariationSku,
+            attributes: v.attributes,
+            sellingPriceIdr: v.pricing.finalSellingPrice,
+            destinationQuantity: v.inventory.destinationQuantity,
           })),
+          images: draft.images.filter((img) => img.valid).map((img) => ({ url: img.sourceUrl })),
         };
 
-        const response = await this.transport.publishItem(payload);
+        const response = await this.transport.publishItem(internalPreparedPayload);
         return {
           status: "PUBLISHED",
           mode: "publish",
