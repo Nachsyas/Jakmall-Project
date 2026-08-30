@@ -1,0 +1,268 @@
+// Prisma schema for Intelligent Product Sync Platform (PostgreSQL)
+// Phase 4A — Persistence Foundation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------
+
+enum SyncJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  NEEDS_REVIEW
+  BLOCKED
+  CANCELLED
+}
+
+enum SyncJobType {
+  SOURCE_SYNC
+  PRICE_UPDATE
+  STOCK_UPDATE
+  CONTENT_UPDATE
+  FULL_SYNC
+}
+
+enum SyncEventType {
+  SOURCE_CAPTURED
+  NO_CHANGE
+  PRICE_CHANGED
+  INVENTORY_CHANGED
+  CONTENT_CHANGED
+  VARIANTS_CHANGED
+  MULTIPLE_CHANGED
+  SYNC_PLANNED
+  SYNC_BLOCKED
+  SYNC_COMPLETED
+  SYNC_FAILED
+  VERIFY_MISMATCH
+}
+
+enum IdempotencyStatus {
+  STARTED
+  COMPLETED
+  FAILED
+}
+
+// ----------------------------------------------------------------------
+// Core Domain Models
+// ----------------------------------------------------------------------
+
+/// Internal product identity independent of supplier source and destination marketplaces.
+model Product {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sources             ProductSource[]
+  marketplaceListings MarketplaceListing[]
+
+  @@map("products")
+}
+
+/// Supplier/source identity binding (e.g. JakMall product).
+model ProductSource {
+  id               String    @id @default(uuid())
+  productId        String
+  product          Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  source           String // e.g. "jakmall"
+  sourceProductId  String // e.g. "6970238281488"
+  sourceUrl        String
+  sourceSellerId   String?
+  sourceSellerName String?
+  lastFetchedAt    DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  variants           SourceVariant[]
+  snapshots          SourceSnapshot[]
+  syncJobs           SyncJob[]
+  syncEvents         SyncEvent[]
+  idempotencyRecords IdempotencyRecord[]
+
+  @@unique([source, sourceProductId])
+  @@index([sourceProductId])
+  @@map("product_sources")
+}
+
+/// Canonical source variant identity and attributes.
+model SourceVariant {
+  id              String        @id @default(uuid())
+  productSourceId String
+  productSource   ProductSource @relation(fields: [productSourceId], references: [id], onDelete: Restrict)
+  sourceSkuId     String
+  merchantSku     String?
+  displaySku      String?
+  attributes      Json // Normalized variant attributes: Record<string, string>
+  weightGrams     Int?
+  preorder        Json?
+  sourceMetadata  Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([productSourceId, sourceSkuId])
+  @@index([sourceSkuId])
+  @@map("source_variants")
+}
+
+/// Historical source-state snapshot with cryptographic hash breakdown.
+model SourceSnapshot {
+  id               String        @id @default(uuid())
+  productSourceId  String
+  productSource    ProductSource @relation(fields: [productSourceId], references: [id], onDelete: Restrict)
+  sourceHash       String // Aggregate semantic hash
+  contentHash      String // Descriptive/content hash
+  priceHash        String // Variant price hash
+  inventoryHash    String // Variant inventory hash
+  variantHash      String // Variant definition hash (topology, attributes, weight, volume, images)
+  canonicalPayload Json // Complete CanonicalProduct snapshot data
+  sourceFetchedAt  DateTime // Timestamp reported by source (does not affect hashes)
+  capturedAt       DateTime      @default(now())
+
+  syncJobs   SyncJob[]
+  syncEvents SyncEvent[]
+
+  @@index([productSourceId, capturedAt])
+  @@index([sourceHash])
+  @@map("source_snapshots")
+}
+
+/// Marketplace listing relationship separate from Product and ProductSource.
+model MarketplaceListing {
+  id               String    @id @default(uuid())
+  productId        String
+  product          Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  marketplace      String // e.g. "shopee"
+  sellerAccountKey String // e.g. "local-demo-shop"
+  remoteListingId  String? // Nullable: absent until verified remote publication
+  status           String // DRAFT, PUBLISHED, etc.
+  lastVerifiedAt   DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  variants   MarketplaceListingVariant[]
+  syncJobs   SyncJob[]
+  syncEvents SyncEvent[]
+
+  @@index([productId, marketplace, sellerAccountKey])
+  @@index([marketplace, remoteListingId])
+  @@map("marketplace_listings")
+}
+
+/// Source-to-destination variant linkage for a marketplace listing.
+model MarketplaceListingVariant {
+  id                        String             @id @default(uuid())
+  listingId                 String
+  listing                   MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Restrict)
+  sourceSkuId               String
+  destinationSku            String
+  remoteVariantId           String? // Nullable: absent until verified remote publication
+  lastKnownDestinationPrice Int?
+  lastKnownDestinationStock Int?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+
+  @@unique([listingId, sourceSkuId])
+  @@index([destinationSku])
+  @@map("marketplace_listing_variants")
+}
+
+// ----------------------------------------------------------------------
+// Synchronization & Operational Models
+// ----------------------------------------------------------------------
+
+/// Durable synchronization intention and execution record.
+model SyncJob {
+  id                   String              @id @default(uuid())
+  productSourceId      String?
+  productSource        ProductSource?      @relation(fields: [productSourceId], references: [id], onDelete: Restrict)
+  marketplaceListingId String?
+  marketplaceListing   MarketplaceListing? @relation(fields: [marketplaceListingId], references: [id], onDelete: Restrict)
+  sourceSnapshotId     String?
+  sourceSnapshot       SourceSnapshot?     @relation(fields: [sourceSnapshotId], references: [id], onDelete: Restrict)
+  jobType              SyncJobType
+  status               SyncJobStatus
+  idempotencyKey       String
+  attemptCount         Int                 @default(0)
+  lastErrorCode        String?
+  lastErrorMessage     String?
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  events             SyncEvent[]
+  idempotencyRecords IdempotencyRecord[]
+
+  @@index([status, createdAt])
+  @@index([idempotencyKey])
+  @@map("sync_jobs")
+}
+
+/// Append-only operational event history.
+model SyncEvent {
+  id                   String              @id @default(uuid())
+  syncJobId            String?
+  syncJob              SyncJob?            @relation(fields: [syncJobId], references: [id], onDelete: Restrict)
+  productSourceId      String?
+  productSource        ProductSource?      @relation(fields: [productSourceId], references: [id], onDelete: Restrict)
+  marketplaceListingId String?
+  marketplaceListing   MarketplaceListing? @relation(fields: [marketplaceListingId], references: [id], onDelete: Restrict)
+  sourceSnapshotId     String?
+  sourceSnapshot       SourceSnapshot?     @relation(fields: [sourceSnapshotId], references: [id], onDelete: Restrict)
+  eventType            SyncEventType
+  payload              Json?
+  createdAt            DateTime            @default(now())
+
+  @@index([syncJobId, createdAt])
+  @@index([eventType, createdAt])
+  @@index([productSourceId, createdAt])
+  @@map("sync_events")
+}
+
+/// Human and system audit trail.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorType  String // SYSTEM, OPERATOR, API
+  actorId    String?
+  action     String // e.g. "APPROVE_DRAFT", "APPLY_POLICY_OVERRIDE"
+  entityType String // e.g. "ProductSource", "MarketplaceListing"
+  entityId   String
+  before     Json?
+  after      Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+/// Operation-level idempotency record to provide persistence uniqueness foundation.
+model IdempotencyRecord {
+  id               String            @id @default(uuid())
+  key              String            @unique
+  operationType    String
+  status           IdempotencyStatus
+  marketplace      String?
+  sellerAccountKey String?
+  productSourceId  String?
+  productSource    ProductSource?    @relation(fields: [productSourceId], references: [id], onDelete: Restrict)
+  syncJobId        String?
+  syncJob          SyncJob?          @relation(fields: [syncJobId], references: [id], onDelete: Restrict)
+  result           Json?
+  createdAt        DateTime          @default(now())
+  completedAt      DateTime?
+
+  @@index([operationType, status])
+  @@map("idempotency_records")
+}
