@@ -28,6 +28,12 @@ database:
   connected: false
   migration_applied: false
 
+synchronization:
+  planner_defined: true
+  state_machine_defined: true
+  field_ownership_policy_defined: true
+  runtime_active: false
+
 queue:
   engine: redis-bullmq
   active: false
@@ -65,6 +71,11 @@ managed_files:
   - src/persistence/stable-serialize.ts
   - src/persistence/hash.ts
   - src/persistence/diff.ts
+  - src/sync/types.ts
+  - src/sync/ownership.ts
+  - src/sync/planner.ts
+  - src/sync/state-machine.ts
+  - src/sync/idempotency.ts
   - scripts/test-jakmall.ts
   - scripts/test-shopee-draft.ts
   - tests/client.test.ts
@@ -78,6 +89,9 @@ managed_files:
   - tests/shopee-verifier.test.ts
   - tests/persistence-hash.test.ts
   - tests/persistence-diff.test.ts
+  - tests/sync-planner.test.ts
+  - tests/sync-state-machine.test.ts
+  - tests/sync-idempotency.test.ts
   - tests/fixtures/README.md
   - tests/fixtures/acmic.html
   - tests/fixtures/momo.html
@@ -90,4 +104,5 @@ managed_files:
   - docs/product/field-ownership.md
   - docs/architecture/system-overview.md
   - docs/architecture/phase4-persistence-sync.md
+  - docs/architecture/phase4-synchronization-domain.md
   - docs/marketplace/shopee-integration.md
