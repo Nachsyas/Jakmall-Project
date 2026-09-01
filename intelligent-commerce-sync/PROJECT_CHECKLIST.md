@@ -3,13 +3,13 @@
 ## Intelligent Product Sync Platform
 
 Last Audit:
-2026-08-30
+2026-09-02
 
 Current Phase:
-PHASE 4A — PERSISTENCE FOUNDATION (CERTIFIED)
+PHASE 4B — SYNCHRONIZATION DOMAIN (CERTIFIED)
 
 Overall Status:
-PHASE 4A DONE [x] — PERSISTENCE FOUNDATION CERTIFIED
+PHASE 4B DONE [x] — SYNCHRONIZATION DOMAIN CERTIFIED
 
 ## EXECUTIVE SUMMARY
 
@@ -28,9 +28,10 @@ Phase 3 is completed under State B because legitimate live Shopee publication
 credentials / verified remote transport were not available during this phase.
 
 Next Recommended Task:
-Phase 4B — Synchronization Domain: deterministic sync planner,
-state transitions, field-ownership-aware operation planning,
-review/block propagation, and audit decision modeling.
+Phase 4C — Execution Infrastructure: repository/runtime integration,
+durable SyncJob execution, Redis/BullMQ queueing, retry/backoff,
+idempotency persistence enforcement, worker execution, scheduling,
+audit/event persistence, and marketplace execution boundary.
 
 ---
 
@@ -218,7 +219,7 @@ status = resolved
 ## PHASE 4 STRATEGY
 
 Phase 4A — Persistence Foundation: CERTIFIED
-Phase 4B — Synchronization Domain: NOT STARTED
+Phase 4B — Synchronization Domain: CERTIFIED
 Phase 4C — Execution Infrastructure: NOT STARTED
 
 Phase 4A establishes persistence foundations only (relational schema, stable serialization, granular hashing, snapshot diffing, and domain types). Live database connectivity, applied migrations, repositories/workers, BullMQ, scheduler, continuous synchronization runtime, and remote marketplace operations are strictly not part of Phase 4A.
@@ -343,3 +344,157 @@ NOT STARTED
 
 Remote Shopee:
 NOT TOUCHED BY PHASE 4A
+
+---
+
+## PHASE 4B TASKS
+
+- [x] P0 Implement deterministic pure synchronization planner (`planSync`)
+- [x] P0 Define field ownership policy domains (`SOURCE`, `SYSTEM`, `SELLER`)
+- [x] P0 Enforce seller-owned content protection from automatic overwrite (`protectSellerField`)
+- [x] P0 Enforce explicit finite listing lifecycle status policy
+- [x] P0 Implement inventory gate validation (`RESOLVED`, `NEEDS_REVIEW`, `BLOCKED`)
+- [x] P0 Validate source diff hash integrity using Phase 4A `diffSnapshotHashes`
+- [x] P0 Implement `CREATE_LISTING` operation planning with review requirement on first snapshot
+- [x] P0 Implement `UPDATE_PRICE` operation planning for price changes
+- [x] P0 Implement `UPDATE_STOCK` operation planning for resolved inventory changes
+- [x] P0 Implement review requirement policy for `CONTENT_CHANGED` (zero automated content writes)
+- [x] P0 Implement review requirement policy for `VARIANTS_CHANGED` (zero automated variant writes)
+- [x] P0 Implement strict status precedence resolution (`BLOCKED` > `NEEDS_REVIEW` > `READY` > `NO_ACTION`)
+- [x] P0 Implement atomic operation eligibility downgrading under review and blocker conditions
+- [x] P0 Enforce deterministic planned operation ordering (`CREATE_LISTING` -> `UPDATE_PRICE` -> `UPDATE_STOCK`)
+- [x] P0 Implement `SyncJob` finite state machine and transition table (`assertSyncJobTransition`)
+- [x] P0 Define Phase 3-compatible product-level base operation key (`baseOperationKey`)
+- [x] P0 Implement snapshot-scoped execution idempotency key for update operations (`<baseKey>:<sourceSnapshotId>`)
+- [x] P0 Implement stable product-scoped idempotency key for `CREATE_LISTING`
+- [x] P0 Add comprehensive Phase 4B automated tests (144 total passing tests)
+- [x] P1 Add Phase 4B architecture documentation (`docs/architecture/phase4-synchronization-domain.md`)
+- [x] P0 Pass Phase 4B Acceptance Gate
+
+---
+
+## PHASE 4B ACCEPTANCE GATE AUDIT — 35/35 PASS
+
+| # | Acceptance Gate Condition | Status | Evidence |
+|---|---|:---:|---|
+| 1 | Historical Phase 2/3/4A regression remains green | PASS | `tests/regression.test.ts`, `tests/shopee-builder.test.ts`, `tests/persistence-diff.test.ts` pass |
+| 2 | Full test suite passes — 144/144, 0 fail | PASS | `npm test` runs 144 tests with 144 pass, 0 fail (`duration_ms: ~632.87ms`) |
+| 3 | TypeScript passes — 0 errors | PASS | `npm run typecheck` (`tsc --noEmit`) passes with 0 errors |
+| 4 | staged diff check passed before implementation commit | PASS | `git diff --cached --check` executed with zero warnings prior to commit `c58cd97` |
+| 5 | locked Phase 4A / Phase 3 implementation files were not modified | PASS | `git diff --stat` across `src/persistence`, `src/marketplace`, `src/canonical`, `src/jakmall`, `prisma/schema.prisma` is completely empty |
+| 6 | planSync is pure and deterministic | PASS | `planSync` produces identical deep-equal outputs for identical inputs with zero timestamps or random tokens |
+| 7 | planner performs zero remote side effects | PASS | `src/sync/planner.ts` produces pure in-memory `SyncPlan` data without network/remote calls |
+| 8 | incoming diff truth is checked using Phase 4A diffSnapshotHashes | PASS | `validatePlannerInput` re-runs `diffSnapshotHashes` to verify hash integrity and reject inconsistent diffs |
+| 9 | NO_CHANGE -> NO_ACTION with zero operations | PASS | `tests/sync-planner.test.ts` verifies `plan.status === "NO_ACTION"` and `plan.operations.length === 0` |
+| 10 | FIRST_SNAPSHOT with no listing -> CREATE_LISTING requiring review | PASS | `planSync` emits `CREATE_LISTING` with `eligibility: "REQUIRES_REVIEW"` and `status: "NEEDS_REVIEW"` |
+| 11 | FIRST_SNAPSHOT with existing listing -> reconciliation review, no write | PASS | `planSync` emits `status: "NEEDS_REVIEW"` with `FIRST_SNAPSHOT_EXISTING_LISTING` and zero operations |
+| 12 | PRICE_CHANGED creates UPDATE_PRICE only | PASS | `tests/sync-planner.test.ts` verifies `UPDATE_PRICE` is planned and `UPDATE_STOCK` is omitted |
+| 13 | resolved INVENTORY_CHANGED creates UPDATE_STOCK | PASS | `gates.inventory === "RESOLVED"` produces eligible `UPDATE_STOCK` operation |
+| 14 | inventory NEEDS_REVIEW prevents ready execution | PASS | `gates.inventory === "NEEDS_REVIEW"` produces `status: "NEEDS_REVIEW"` and withholds execution |
+| 15 | inventory BLOCKED blocks execution | PASS | `gates.inventory === "BLOCKED"` produces `status: "BLOCKED"` with `INVENTORY_POLICY_BLOCKED` |
+| 16 | CONTENT_CHANGED requires review and creates no content write operation | PASS | `CONTENT_CHANGED` requires review, records `SELLER_OWNED_FIELD_PROTECTED`, and produces 0 operations |
+| 17 | VARIANTS_CHANGED requires review and creates no variant write operation | PASS | `VARIANTS_CHANGED` requires review with HIGH risk and produces 0 operations |
+| 18 | listing lifecycle policy is finite and fail-closed | PASS | Finite sets defined for update-capable, review-required, and blocked statuses; unknown statuses throw `SyncPlanningInputError` |
+| 19 | only PUBLISHED and VERIFIED permit automatic update readiness | PASS | `tests/sync-planner.test.ts` audits all other 12 listing statuses to verify they never produce `READY` updates |
+| 20 | existing listing missing remoteListingId blocks updates | PASS | Existing listing with missing/blank `remoteListingId` produces `BLOCKED` plan with `REMOTE_LISTING_ID_REQUIRED` |
+| 21 | existing listing missing status blocks updates | PASS | Existing listing with missing status produces `BLOCKED` plan with `LISTING_STATUS_REQUIRED` |
+| 22 | exists=false rejects contradictory listing status / remote identity | PASS | `exists: false` with non-empty `remoteListingId` or any `status` throws `SyncPlanningInputError` |
+| 23 | BLOCKED precedence preserves requiresReview fact when applicable | PASS | When blocker and review conditions coincide, `status: "BLOCKED"`, `blocked: true`, and `requiresReview: true` |
+| 24 | overall plan eligibility is atomically downgraded for review/block | PASS | Multi-change plans atomically downgrade all operations to `BLOCKED` or `REQUIRES_REVIEW` |
+| 25 | operation ordering is deterministic | PASS | Operations are strictly sorted: `CREATE_LISTING` (1) -> `UPDATE_PRICE` (2) -> `UPDATE_STOCK` (3) |
+| 26 | sourceSnapshotId is validated and required for update execution identity | PASS | `sourceSnapshotId` must be non-empty, non-colon string; blank or colon-containing values throw errors |
+| 27 | UPDATE_PRICE keys are snapshot-scoped | PASS | Idempotency key format is `<baseKey>:<sourceSnapshotId>`; sequential price updates yield distinct keys |
+| 28 | UPDATE_STOCK keys are snapshot-scoped | PASS | Idempotency key format is `<baseKey>:<sourceSnapshotId>`; sequential inventory updates yield distinct keys |
+| 29 | CREATE_LISTING identity remains product-scoped | PASS | Listing creation key preserves stable product-level identity across snapshots |
+| 30 | baseOperationKey remains Phase 3 formatIdempotencyKey-compatible | PASS | `baseOperationKey` strictly matches `formatIdempotencyKey` output |
+| 31 | operation identity contains no random/time-generated value | PASS | Idempotency key derivation contains zero timestamps (`Date.now()`) or random tokens (`randomUUID()`) |
+| 32 | seller-owned fields are protected from automatic overwrite | PASS | `protectSellerField` and `isAutoSyncAllowed` enforce seller ownership domains |
+| 33 | SyncJob transition table and terminal states are tested | PASS | `tests/sync-state-machine.test.ts` validates all allowed transitions and terminal states (`COMPLETED`, `CANCELLED`) |
+| 34 | Phase 4B imports neither PrismaClient nor MarketplaceAdapter | PASS | Grep audit confirms zero runtime database or adapter imports in `src/sync/` |
+| 35 | documentation truthfully states DB/queue/runtime/remote execution are not active | PASS | `docs/architecture/phase4-synchronization-domain.md` truthfully records non-active status for execution runtime |
+
+---
+
+## PHASE 4B FINAL VERIFIED EVIDENCE
+
+Date:
+2026-09-02
+
+Branch:
+phase4/sync-domain
+
+Parent certification:
+01da3675b168a88628e7d9223bf0a6edd00b3cca
+
+Implementation commit:
+c58cd97d92a1570de1d7ed4faa37a628085e5f10
+
+Implementation commit message:
+feat: add Phase 4B synchronization domain
+
+Remote implementation:
+VERIFIED
+
+Implementation scope:
+10 files changed
+2791 insertions
+0 deletions
+
+npm test:
+PASS — 144/144, 0 fail
+
+Native terminal runtime evidence:
+duration_ms 632.865458
+real 1.00 s
+
+Final staged test evidence:
+duration_ms 637.70075
+144/144 PASS
+
+npm run typecheck:
+PASS — 0 errors
+
+git diff --cached --check:
+PASS at implementation acceptance
+
+Phase 4A locked files:
+UNCHANGED
+
+Planner:
+IMPLEMENTED
+
+State machine:
+IMPLEMENTED
+
+Field ownership:
+IMPLEMENTED
+
+Snapshot-scoped update idempotency:
+IMPLEMENTED
+
+CREATE_LISTING product-scoped identity:
+IMPLEMENTED
+
+PostgreSQL connected:
+NO
+
+Migration applied:
+NO
+
+Redis/BullMQ:
+NOT STARTED
+
+Worker/scheduler:
+NOT STARTED
+
+Continuous sync runtime:
+NOT STARTED
+
+Remote marketplace mutation:
+NONE
+
+Shopee wire protocol:
+UNVERIFIED
+
+Phase 4C:
+NOT STARTED
