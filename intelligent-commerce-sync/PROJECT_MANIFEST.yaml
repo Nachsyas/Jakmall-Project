@@ -25,8 +25,8 @@ database:
   orm: prisma
   schema_defined: true
   schema_validated: true
-  connected: false
-  migration_applied: false
+  connected: true
+  migration_applied: true
 
 synchronization:
   planner_defined: true
@@ -49,6 +49,7 @@ managed_files:
   - PROJECT_CHECKLIST.md
   - PROJECT_MANIFEST.yaml
   - README.md
+  - docker-compose.yml
   - package.json
   - tsconfig.json
   - .env.example
@@ -97,6 +98,7 @@ managed_files:
   - tests/sync-state-machine.test.ts
   - tests/sync-idempotency.test.ts
   - tests/execution-durability.test.ts
+  - tests/integration/sync-runtime.db.test.ts
   - tests/fixtures/README.md
   - tests/fixtures/acmic.html
   - tests/fixtures/momo.html
