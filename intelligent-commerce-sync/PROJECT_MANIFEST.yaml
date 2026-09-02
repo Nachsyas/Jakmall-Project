@@ -71,11 +71,15 @@ managed_files:
   - src/persistence/stable-serialize.ts
   - src/persistence/hash.ts
   - src/persistence/diff.ts
+  - src/persistence/prisma.ts
+  - src/persistence/repositories/sync-runtime-repository.ts
   - src/sync/types.ts
   - src/sync/ownership.ts
   - src/sync/planner.ts
   - src/sync/state-machine.ts
   - src/sync/idempotency.ts
+  - src/execution/types.ts
+  - src/execution/durable-payload.ts
   - scripts/test-jakmall.ts
   - scripts/test-shopee-draft.ts
   - tests/client.test.ts
@@ -92,6 +96,7 @@ managed_files:
   - tests/sync-planner.test.ts
   - tests/sync-state-machine.test.ts
   - tests/sync-idempotency.test.ts
+  - tests/execution-durability.test.ts
   - tests/fixtures/README.md
   - tests/fixtures/acmic.html
   - tests/fixtures/momo.html

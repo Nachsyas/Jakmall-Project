@@ -14,6 +14,12 @@ datasource db {
 // Enums
 // ----------------------------------------------------------------------
 
+enum SyncOperationType {
+  CREATE_LISTING
+  UPDATE_PRICE
+  UPDATE_STOCK
+}
+
 enum SyncJobStatus {
   PENDING
   PROCESSING
@@ -189,7 +195,10 @@ model SyncJob {
   marketplaceListing   MarketplaceListing? @relation(fields: [marketplaceListingId], references: [id], onDelete: Restrict)
   sourceSnapshotId     String?
   sourceSnapshot       SourceSnapshot?     @relation(fields: [sourceSnapshotId], references: [id], onDelete: Restrict)
+  operationType        SyncOperationType
   jobType              SyncJobType
+  executionPayload     Json
+  payloadVersion       Int                 @default(1)
   status               SyncJobStatus
   idempotencyKey       String
   attemptCount         Int                 @default(0)
