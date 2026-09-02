@@ -6,6 +6,7 @@
   "scripts": {
     "test": "tsx --test tests/*.test.ts",
     "test:integration:db": "tsx --test tests/integration/**/*.db.test.ts",
+    "test:integration:queue": "tsx --test tests/integration/**/*.redis.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
@@ -14,7 +15,9 @@
   "type": "module",
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "bullmq": "^6.3.4",
     "cheerio": "^1.2.0",
+    "ioredis": "^6.0.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
