@@ -97,6 +97,13 @@ managed_files:
   - src/runtime/recovery.ts
   - src/runtime/scheduler.ts
   - src/runtime/maintenance.ts
+  - src/intelligence/types.ts
+  - src/intelligence/config.ts
+  - src/intelligence/provider.ts
+  - src/intelligence/safety.ts
+  - src/intelligence/prompt-builder.ts
+  - src/intelligence/output-validator.ts
+  - src/intelligence/semantic-intelligence-service.ts
   - scripts/test-jakmall.ts
   - scripts/test-shopee-draft.ts
   - tests/client.test.ts
@@ -118,6 +125,7 @@ managed_files:
   - tests/integration/sync-queue.redis.test.ts
   - tests/integration/marketplace-execution.marketplace.test.ts
   - tests/integration/runtime-hardening.runtime.test.ts
+  - tests/intelligence/semantic-intelligence.test.ts
   - tests/fixtures/README.md
   - tests/fixtures/acmic.html
   - tests/fixtures/momo.html
@@ -133,4 +141,5 @@ managed_files:
   - docs/architecture/phase4-synchronization-domain.md
   - docs/architecture/phase4-marketplace-execution.md
   - docs/architecture/phase4-runtime-hardening.md
+  - docs/architecture/phase5-semantic-intelligence.md
   - docs/marketplace/shopee-integration.md
