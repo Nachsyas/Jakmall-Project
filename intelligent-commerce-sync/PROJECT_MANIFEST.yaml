@@ -91,6 +91,12 @@ managed_files:
   - src/queue/error-sanitizer.ts
   - src/queue/sync-queue.ts
   - src/queue/sync-worker.ts
+  - src/runtime/types.ts
+  - src/runtime/config.ts
+  - src/runtime/health.ts
+  - src/runtime/recovery.ts
+  - src/runtime/scheduler.ts
+  - src/runtime/maintenance.ts
   - scripts/test-jakmall.ts
   - scripts/test-shopee-draft.ts
   - tests/client.test.ts
@@ -111,6 +117,7 @@ managed_files:
   - tests/integration/sync-runtime.db.test.ts
   - tests/integration/sync-queue.redis.test.ts
   - tests/integration/marketplace-execution.marketplace.test.ts
+  - tests/integration/runtime-hardening.runtime.test.ts
   - tests/fixtures/README.md
   - tests/fixtures/acmic.html
   - tests/fixtures/momo.html
@@ -125,4 +132,5 @@ managed_files:
   - docs/architecture/phase4-persistence-sync.md
   - docs/architecture/phase4-synchronization-domain.md
   - docs/architecture/phase4-marketplace-execution.md
+  - docs/architecture/phase4-runtime-hardening.md
   - docs/marketplace/shopee-integration.md
