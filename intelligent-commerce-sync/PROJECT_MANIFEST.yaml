@@ -81,6 +81,10 @@ managed_files:
   - src/sync/idempotency.ts
   - src/execution/types.ts
   - src/execution/durable-payload.ts
+  - src/execution/marketplace/types.ts
+  - src/execution/marketplace/gateway.ts
+  - src/execution/marketplace/verification.ts
+  - src/execution/marketplace/marketplace-sync-job-executor.ts
   - src/queue/types.ts
   - src/queue/connection.ts
   - src/queue/health.ts
@@ -106,6 +110,7 @@ managed_files:
   - tests/execution-durability.test.ts
   - tests/integration/sync-runtime.db.test.ts
   - tests/integration/sync-queue.redis.test.ts
+  - tests/integration/marketplace-execution.marketplace.test.ts
   - tests/fixtures/README.md
   - tests/fixtures/acmic.html
   - tests/fixtures/momo.html
@@ -119,4 +124,5 @@ managed_files:
   - docs/architecture/system-overview.md
   - docs/architecture/phase4-persistence-sync.md
   - docs/architecture/phase4-synchronization-domain.md
+  - docs/architecture/phase4-marketplace-execution.md
   - docs/marketplace/shopee-integration.md

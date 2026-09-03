@@ -7,6 +7,7 @@
     "test": "tsx --test tests/*.test.ts",
     "test:integration:db": "tsx --test tests/integration/**/*.db.test.ts",
     "test:integration:queue": "tsx --test tests/integration/**/*.redis.test.ts",
+    "test:integration:marketplace": "tsx --test tests/integration/**/*.marketplace.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
