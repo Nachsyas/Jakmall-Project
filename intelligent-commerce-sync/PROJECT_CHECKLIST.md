@@ -3,35 +3,38 @@
 ## Intelligent Product Sync Platform
 
 Last Audit:
-2026-09-02
+2026-09-05
 
 Current Phase:
-PHASE 4B — SYNCHRONIZATION DOMAIN (CERTIFIED)
+FINAL GATE — SUBMISSION PREPARATION
 
 Overall Status:
-PHASE 4B DONE [x] — SYNCHRONIZATION DOMAIN CERTIFIED
+PHASES 2–5 COMPLETE / CERTIFIED
+FINAL DOCUMENTATION & SUBMISSION GATE IN PROGRESS
 
 ## EXECUTIVE SUMMARY
 
-Total Phase 3 Items: 16
-Done: 16
-Partial: 0
-Todo: 0
-Blocked: 0
-
-P0 Remaining: 0
+Total Phase Status Summary:
+- Phase 2 (Source Engine & Canonical Normalization): CERTIFIED
+- Phase 3 (Shopee Draft, Policies & State B Boundary): CERTIFIED
+- Phase 4A (PostgreSQL Persistence Foundation): CERTIFIED
+- Phase 4B (Synchronization Domain & State Machine): CERTIFIED
+- Phase 4C (Execution Infrastructure & Runtime Hardening): CERTIFIED
+- Phase 5A (Semantic Intelligence Safety Foundation): CERTIFIED
+- Phase 5B (Catalog Intelligence & Verified Mapping Store): CERTIFIED
+- Phase 5C (Review Intelligence & Anomaly Annotation): CERTIFIED
+- Phase 5D (Parser Recovery Assistance): CERTIFIED
+- Phase 5E (Live AI Provider Safety Gate): CERTIFIED
+- Final Gate (Documentation & Submission Truth Alignment): IN PROGRESS
 
 Current Blocking Phase:
-None.
+None in source implementation.
 
-Phase 3 is completed under State B because legitimate live Shopee publication
-credentials / verified remote transport were not available during this phase.
+Submission Blocker:
+Documentation and submission audit finalization only.
 
-Next Recommended Task:
-Phase 4C — Execution Infrastructure: repository/runtime integration,
-durable SyncJob execution, Redis/BullMQ queueing, retry/backoff,
-idempotency persistence enforcement, worker execution, scheduling,
-audit/event persistence, and marketplace execution boundary.
+Repository Regression Suite:
+Latest certified local regression evidence: 588 / 588 PASS, 0 FAIL
 
 ---
 
@@ -220,7 +223,7 @@ status = resolved
 
 Phase 4A — Persistence Foundation: CERTIFIED
 Phase 4B — Synchronization Domain: CERTIFIED
-Phase 4C — Execution Infrastructure: NOT STARTED
+Phase 4C — Execution Infrastructure: CERTIFIED (see Phase 4C section below)
 
 Phase 4A establishes persistence foundations only (relational schema, stable serialization, granular hashing, snapshot diffing, and domain types). Live database connectivity, applied migrations, repositories/workers, BullMQ, scheduler, continuous synchronization runtime, and remote marketplace operations are strictly not part of Phase 4A.
 
@@ -497,4 +500,119 @@ Shopee wire protocol:
 UNVERIFIED
 
 Phase 4C:
-NOT STARTED
+NOT STARTED (Historical state at Phase 4B certification; see Phase 4C below)
+
+---
+
+## PHASE 4C — EXECUTION INFRASTRUCTURE (CERTIFIED)
+
+- **Date:** 2026-09-02
+- **Key Commits:** `2510446`, `06b66ce`, `4da52f2`, `61ffd4e`, `a1b7ccc`
+- **Scope & Capabilities:**
+  - Durable execution contract & repositories (`SyncJobRepository`, `IdempotencyRecordRepository`, `SyncEventRepository`, `AuditLogRepository`).
+  - PostgreSQL 16 schema & migrations (`20260902045541_init_runtime_persistence`).
+  - Redis 7 / BullMQ queueing (`SyncExecutionQueue`, `SyncWorker`, minimal queue payloads, retry/backoff).
+  - Marketplace execution boundary (`ShopeeMarketplaceAdapter`, `State B` credential guard, `BLOCKED_BY_CREDENTIALS`).
+  - Runtime hardening: `SyncScheduler`, `StaleProcessingRecovery`, `PeriodicMaintenanceLoop`.
+- **Integration Test Evidence:**
+  - `test:integration:db`: 12/12 PASS
+  - `test:integration:queue`: 21/21 PASS
+  - `test:integration:marketplace`: 18/18 PASS
+  - `test:integration:runtime`: 20/20 PASS
+
+---
+
+## PHASE 5A — SEMANTIC INTELLIGENCE SAFETY FOUNDATION (CERTIFIED)
+
+- **Date:** 2026-09-03
+- **Initial Phase 5A implementation:** `4f4181d436d10aa27d6f153e6de5e183d5a6aaa1`
+- **Final Phase 5A controlled repair / re-certified baseline:** `3850770d6fc556ee0b032c5f9b623c87ae398b63`
+- **Phase 5B/5C commit:** `0ba25cc3e3a2eca5be59aae2f87bdb701f38e422`
+- **Scope & Capabilities:**
+  - Canonical semantic request serialization & deterministic request IDs.
+  - Deterministic resolver priority; zero provider invocation when deterministic match succeeds.
+  - Runtime Zod schema validation on provider inputs and outputs.
+  - Strict candidate and evidence allowlists rejecting provider outputs that reference unknown candidate or evidence IDs.
+  - Fail-closed prompt boundaries; prohibition of price, stock, or execution payload mutation.
+- **Test Evidence:**
+  - `tests/intelligence/semantic-intelligence.test.ts`: 82/82 PASS
+
+---
+
+## PHASE 5B — CATALOG INTELLIGENCE (CERTIFIED)
+
+- **Date:** 2026-09-03
+- **Commit:** `0ba25cc`
+- **Scope & Capabilities:**
+  - Category mapping with deterministic normalization and store lookup.
+  - Attribute mapping with source specification value validation.
+  - Local `VerifiedMappingStore` memory cache bypassing AI for verified matches.
+  - AI suggestion fallback strictly requiring human review (`reviewRequired: true`).
+- **Test Evidence:**
+  - `npm run test:intelligence:catalog`: 47/47 PASS
+
+---
+
+## PHASE 5C — REVIEW INTELLIGENCE (CERTIFIED)
+
+- **Date:** 2026-09-03
+- **Commit:** `0ba25cc`
+- **Scope & Capabilities:**
+  - Multi-signal anomaly review across category mappings, variant labels, and candidate confidence.
+  - Strictly non-escalating AI advisory annotations (`AI_ANOMALY_ANNOTATION` INFO severity).
+  - Prohibition of AI modifying deterministic blocking findings or downgrading review states.
+  - Locale-independent deterministic finding sorting and composite key deduplication.
+- **Test Evidence:**
+  - `npm run test:intelligence:review`: 75/75 PASS
+
+---
+
+## PHASE 5D — PARSER RECOVERY ASSISTANCE (CERTIFIED)
+
+- **Date:** 2026-09-04
+- **Commit:** `5f21127`
+- **Scope & Capabilities:**
+  - Strict diagnostic classification for non-semantic fetch failures (SSRF, HTTP 429, HTTP 404, timeouts).
+  - Non-semantic blocker dominance (network/HTTP errors bypass AI entirely).
+  - Structural DOM observation analysis and anti-price-synthesis guidance.
+  - Pure advisory guidance without executable code or selector generation.
+- **Test Evidence:**
+  - `npm run test:intelligence:parser`: 46/46 PASS
+
+---
+
+## PHASE 5E — LIVE AI PROVIDER SAFETY GATE (CERTIFIED)
+
+- **Date:** 2026-09-05
+- **Commit:** `778041c`
+- **Scope & Capabilities:**
+  - Native fetch adapter targeting OpenAI Responses API (`gpt-5.6-luna`), `https://api.openai.com/v1/responses`.
+  - Strict own-property structural privacy gate rejecting forbidden secret-bearing property names, unknown keys, and provenance mismatches before network dispatch.
+  - Character request budget (default 16,000 chars; bounds: 500..50,000) and process ceiling (default 1,000 calls; bounds: 1..100,000).
+  - Sliding-window rate limiter (default 60 req / 60s; bounds: 1..1,000 req / 1,000..600,000 ms) and three-state circuit breaker (`CLOSED`, `OPEN`, `HALF_OPEN`).
+  - Response error and authoritative usage accounting repair: usage accounted before fail-closed error inspection.
+  - Zero vendor SDK dependencies; `DISABLED` by default; frozen usage telemetry.
+- **Test Evidence:**
+  - `npm run test:intelligence:live-provider`: 56/56 PASS (10 suites)
+
+---
+
+## CURRENT REPOSITORY REGRESSION EVIDENCE (ALL PHASES)
+
+- **Latest certified local regression evidence:** 588 / 588 PASS, 0 FAIL
+- **TypeScript Typecheck:** 0 errors (`tsc --noEmit`)
+- **Certified Phase 5 implementation baseline:** `778041c74e85a30e0abcd058ee8a4cfe75cde0e5`
+- **Regression Breakdown:**
+  - Root Core Unit Tests (`npm test`): 211
+  - Phase 5A Semantic Foundation: 82
+  - Phase 5B Catalog Intelligence: 47
+  - Phase 5C Review Intelligence: 75
+  - Phase 5D Parser Recovery: 46
+  - Phase 5E Live AI Provider: 56
+  - Phase 4 Integration (Database): 12
+  - Phase 4 Integration (Queue): 21
+  - Phase 4 Integration (Marketplace): 18
+  - Phase 4 Integration (Runtime): 20
+  - **Sum:** $211 + 82 + 47 + 75 + 46 + 56 + 12 + 21 + 18 + 20 = 588$ tests
+- **Note on Subdirectory Intelligence Runner:**
+  `npm run test:intelligence` runs `tests/intelligence/**/*.test.ts` across subdirectories, executing $47 + 75 + 46 + 56 = 224$ tests. Top-level `tests/intelligence/semantic-intelligence.test.ts` (82 tests) is executed separately via `npx tsx --test tests/intelligence/semantic-intelligence.test.ts`.
