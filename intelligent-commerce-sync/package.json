@@ -12,6 +12,7 @@
     "test:intelligence": "tsx --test tests/intelligence/**/*.test.ts",
     "test:intelligence:catalog": "tsx --test tests/intelligence/catalog/**/*.test.ts",
     "test:intelligence:review": "tsx --test tests/intelligence/review/**/*.test.ts",
+    "test:intelligence:parser": "tsx --test tests/intelligence/parser-recovery/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
