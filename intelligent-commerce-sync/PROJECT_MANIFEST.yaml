@@ -104,6 +104,13 @@ managed_files:
   - src/intelligence/prompt-builder.ts
   - src/intelligence/output-validator.ts
   - src/intelligence/semantic-intelligence-service.ts
+  - src/intelligence/catalog/types.ts
+  - src/intelligence/catalog/normalization.ts
+  - src/intelligence/catalog/verified-mapping-store.ts
+  - src/intelligence/catalog/catalog-intelligence-service.ts
+  - src/intelligence/review/types.ts
+  - src/intelligence/review/deterministic-anomaly-detector.ts
+  - src/intelligence/review/review-intelligence-service.ts
   - scripts/test-jakmall.ts
   - scripts/test-shopee-draft.ts
   - tests/client.test.ts
@@ -126,6 +133,8 @@ managed_files:
   - tests/integration/marketplace-execution.marketplace.test.ts
   - tests/integration/runtime-hardening.runtime.test.ts
   - tests/intelligence/semantic-intelligence.test.ts
+  - tests/intelligence/catalog/catalog-intelligence.test.ts
+  - tests/intelligence/review/review-intelligence.test.ts
   - tests/fixtures/README.md
   - tests/fixtures/acmic.html
   - tests/fixtures/momo.html
@@ -142,4 +151,6 @@ managed_files:
   - docs/architecture/phase4-marketplace-execution.md
   - docs/architecture/phase4-runtime-hardening.md
   - docs/architecture/phase5-semantic-intelligence.md
+  - docs/architecture/phase5-category-attribute-intelligence.md
+  - docs/architecture/phase5-anomaly-review-intelligence.md
   - docs/marketplace/shopee-integration.md

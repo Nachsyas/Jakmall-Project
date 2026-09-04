@@ -10,6 +10,8 @@
     "test:integration:marketplace": "tsx --test tests/integration/**/*.marketplace.test.ts",
     "test:integration:runtime": "tsx --test tests/integration/**/*.runtime.test.ts",
     "test:intelligence": "tsx --test tests/intelligence/**/*.test.ts",
+    "test:intelligence:catalog": "tsx --test tests/intelligence/catalog/**/*.test.ts",
+    "test:intelligence:review": "tsx --test tests/intelligence/review/**/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],
