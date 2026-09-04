@@ -25,6 +25,7 @@ import {
   validateSemanticTaskInput,
   computeDeterministicRisk,
   sanitizeErrorMessage,
+  canonicalizeSemanticPayload,
   getCanonicalCandidateIds,
   getCanonicalEvidenceIds,
 } from "../../src/intelligence/safety.js";
@@ -1610,4 +1611,131 @@ test("FINAL-07: validateSemanticProviderResponse rejects symbol keys, non-plain 
   const validated = validateSemanticProviderResponse({ rawText: "{\"hello\":\"world\"}" });
   assert.equal(validated.rawText, "{\"hello\":\"world\"}");
   assert.deepEqual(Object.keys(validated), ["rawText"]);
+});
+
+test("A5A-OPTIONAL-01: ATTRIBUTE_MAPPING without productTitle succeeds and executes without throwing", async () => {
+  const provider = new TestFakeAiProvider();
+  provider.enqueueResponse(JSON.stringify({
+    schemaVersion: 1,
+    taskKind: "ATTRIBUTE_MAPPING",
+    selectedCandidateId: "attr_1",
+    confidence: 0.95,
+    explanationSummary: "Matched blue color attribute.",
+    evidenceRefs: [],
+  }));
+
+  const input: AttributeMappingSemanticInput = {
+    taskKind: "ATTRIBUTE_MAPPING",
+    sourceSpecificationKey: "Color",
+    sourceSpecificationValue: "Blue",
+    candidates: [
+      { id: "attr_1", name: "Color: Blue" },
+      { id: "attr_2", name: "Color: Red" },
+    ],
+  };
+
+  const service = new SemanticIntelligenceService({ provider });
+  const result = await service.executeTask(input);
+
+  assert.equal(result.outcome, "SUGGESTED");
+  assert.equal(result.selectedCandidateId, "attr_1");
+  assert.equal(provider.callCount, 1);
+});
+
+test("A5A-OPTIONAL-02: omitted productTitle has no own property in untrustedData, canonical payload, or prompt", async () => {
+  const provider = new TestFakeAiProvider();
+  provider.enqueueResponse(JSON.stringify({
+    schemaVersion: 1,
+    taskKind: "ATTRIBUTE_MAPPING",
+    selectedCandidateId: "attr_1",
+    confidence: 0.9,
+    explanationSummary: "Matched attribute",
+    evidenceRefs: [],
+  }));
+
+  const input: AttributeMappingSemanticInput = {
+    taskKind: "ATTRIBUTE_MAPPING",
+    sourceSpecificationKey: "Material",
+    sourceSpecificationValue: "Cotton",
+    candidates: [
+      { id: "attr_1", name: "Material: Cotton" },
+    ],
+  };
+
+  const service = new SemanticIntelligenceService({ provider });
+  await service.executeTask(input);
+
+  assert.equal(provider.callCount, 1);
+  const req = provider.lastRequest!;
+  assert.equal(Object.prototype.hasOwnProperty.call(req.untrustedData, "productTitle"), false);
+
+  const config = service.getConfig();
+  const validated = validateSemanticTaskInput(input, config);
+  const canonical = canonicalizeSemanticPayload(validated);
+  assert.equal(Object.prototype.hasOwnProperty.call(canonical, "productTitle"), false);
+
+  assert.doesNotMatch(req.prompt, /productTitle/);
+});
+
+test("A5A-OPTIONAL-03: explicit productTitle undefined is canonically equivalent to omitted", async () => {
+  const provider = new TestFakeAiProvider();
+  provider.enqueueResponse(JSON.stringify({
+    schemaVersion: 1,
+    taskKind: "ATTRIBUTE_MAPPING",
+    selectedCandidateId: "attr_1",
+    confidence: 0.9,
+    explanationSummary: "Matched attribute",
+    evidenceRefs: [],
+  }));
+
+  const input: AttributeMappingSemanticInput = {
+    taskKind: "ATTRIBUTE_MAPPING",
+    sourceSpecificationKey: "Size",
+    sourceSpecificationValue: "XL",
+    productTitle: undefined,
+    candidates: [
+      { id: "attr_1", name: "Size: XL" },
+    ],
+  };
+
+  const service = new SemanticIntelligenceService({ provider });
+  const result = await service.executeTask(input);
+
+  assert.equal(result.outcome, "SUGGESTED");
+  assert.equal(provider.callCount, 1);
+  const req = provider.lastRequest!;
+  assert.equal(Object.prototype.hasOwnProperty.call(req.untrustedData, "productTitle"), false);
+  assert.doesNotMatch(req.prompt, /productTitle/);
+});
+
+test("A5A-OPTIONAL-04: ATTRIBUTE_MAPPING with real productTitle preserves exact value in request", async () => {
+  const provider = new TestFakeAiProvider();
+  provider.enqueueResponse(JSON.stringify({
+    schemaVersion: 1,
+    taskKind: "ATTRIBUTE_MAPPING",
+    selectedCandidateId: "attr_1",
+    confidence: 0.92,
+    explanationSummary: "Matched attribute with title context",
+    evidenceRefs: [],
+  }));
+
+  const input: AttributeMappingSemanticInput = {
+    taskKind: "ATTRIBUTE_MAPPING",
+    sourceSpecificationKey: "Color",
+    sourceSpecificationValue: "Navy",
+    productTitle: "Men Slim Fit Cotton Shirt",
+    candidates: [
+      { id: "attr_1", name: "Color: Navy" },
+    ],
+  };
+
+  const service = new SemanticIntelligenceService({ provider });
+  const result = await service.executeTask(input);
+
+  assert.equal(result.outcome, "SUGGESTED");
+  assert.equal(provider.callCount, 1);
+  const req = provider.lastRequest!;
+  assert.equal(Object.prototype.hasOwnProperty.call(req.untrustedData, "productTitle"), true);
+  assert.equal(req.untrustedData.productTitle, "Men Slim Fit Cotton Shirt");
+  assert.match(req.prompt, /Men Slim Fit Cotton Shirt/);
 });

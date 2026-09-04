@@ -145,7 +145,9 @@ export function canonicalizeSemanticPayload(input: SemanticTaskInput): Record<st
     taskKind: input.taskKind,
   };
 
-  if ("productTitle" in input) base.productTitle = input.productTitle;
+  if ("productTitle" in input && input.productTitle !== undefined) {
+    base.productTitle = input.productTitle;
+  }
   if ("productDescription" in input && input.productDescription !== undefined) {
     base.productDescription = input.productDescription;
   }
