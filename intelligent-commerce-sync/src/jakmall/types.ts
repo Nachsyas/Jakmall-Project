@@ -97,8 +97,13 @@ export const JakmallRawSpdtSchema = z.object({
   name: z.string().optional(),
   url: z.string().optional(),
   sku: z.record(z.string(), JakmallRawSkuItemSchema),
-  variants: z.record(z.string(), z.unknown()).optional(),
-  matrix: z.record(z.string(), z.unknown()).optional(),
+  variants: z
+    .union([
+      z.record(z.string(), z.unknown()),
+      z.array(z.record(z.string(), z.unknown())),
+    ])
+    .optional(),
+  matrix: z.record(z.string(), z.unknown()).nullable().optional(),
   store: z.record(z.string(), z.unknown()).optional(),
   store_showcases: z.unknown().optional(),
   rating: z.unknown().optional(),

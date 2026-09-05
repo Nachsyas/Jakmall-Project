@@ -28,8 +28,8 @@ function isRecord(val: unknown): val is Record<string, unknown> {
  * and tracks `previous` dimension ordering where present in source data.
  */
 export function resolveVariantAttributes(
-  variantsDef?: Record<string, unknown>,
-  matrixDef?: Record<string, unknown>
+  variantsDef?: Record<string, unknown> | Record<string, unknown>[] | null,
+  matrixDef?: Record<string, unknown> | null
 ): Map<string, Record<string, string>> {
   const skuAttributes = new Map<string, Record<string, string>>();
 
@@ -304,8 +304,8 @@ export function normalizeToCanonical(
 
   // Resolve attributes matrix
   const matrixAttributes = resolveVariantAttributes(
-    spdt.variants as Record<string, unknown> | undefined,
-    spdt.matrix as Record<string, unknown> | undefined
+    spdt.variants,
+    spdt.matrix
   );
 
   const canonicalVariants: CanonicalVariant[] = [];

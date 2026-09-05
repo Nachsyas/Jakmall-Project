@@ -8,8 +8,13 @@ import {
   normalizeToCanonical,
   normalizeStock,
   JakmallNormalizerError,
+  resolveVariantAttributes,
 } from "../src/jakmall/normalizer.js";
-import type { JakmallRawSkuItem, ParsedJakmallPage } from "../src/jakmall/types.js";
+import {
+  JakmallRawSpdtSchema,
+  type JakmallRawSkuItem,
+  type ParsedJakmallPage,
+} from "../src/jakmall/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -312,4 +317,189 @@ test("Price safety: missing, null, or zero price must never silently become 0", 
     () => normalizeToCanonical(dummyParsed, "https://www.jakmall.com/demo/bad"),
     (err: unknown) => err instanceof JakmallNormalizerError && err.code === "INVALID_PRICE"
   );
+});
+
+test("Freedom Store single-SKU fixture regression (variants=[] and matrix=null)", () => {
+  const html = fs.readFileSync(path.join(fixturesDir, "freedom-single-sku.html"), "utf-8");
+  const parsed = parseJakmallHtml(html);
+
+  // 1. Raw parsing verification
+  assert.equal(parsed.spdt.id, "5144975505853");
+  assert.ok(Array.isArray(parsed.spdt.variants), "variants must be an array");
+  assert.equal(parsed.spdt.variants.length, 0, "variants array must be empty");
+  assert.equal(parsed.spdt.matrix, null, "matrix must be null");
+
+  // 2. Canonical normalization verification
+  const canonical = normalizeToCanonical(
+    parsed,
+    "https://www.jakmall.com/freedom-store/kabel-data-samsung-original-micro-usb-fast-chargging-panjang-150cm"
+  );
+
+  assert.equal(canonical.sourceProductId, "5144975505853");
+  assert.equal(canonical.title, "Kabel Data Samsung Original Micro USB Fast Chargging Panjang 150cm");
+  assert.equal(canonical.variants.length, 1, "Must normalize exactly 1 canonical variant");
+
+  const v = canonical.variants[0];
+  assert.ok(v, "Variant must exist");
+  assert.equal(v.sourceSkuId, "5634519268566");
+  assert.equal(v.sourceSku, "5634519268566");
+  assert.equal(v.merchantSku, "SAM-MICRO-150");
+  assert.equal(v.displaySku, "5634519268566");
+  assert.equal(v.price.final, 19000);
+  assert.equal(v.inventory.available, true);
+  assert.equal(v.inventory.exact, false);
+  assert.equal(v.inventory.quantity, undefined);
+
+  // 3. Attribute preservation: absent matrix must NEVER fabricate variant attributes
+  assert.deepEqual(v.attributes, {}, "Absent matrix must leave attributes as empty record without fabrication");
+});
+
+test("JakmallRawSpdtSchema bounded compatibility: accepts observed shapes, rejects invalid primitives", () => {
+  const baseSku = {
+    "sku-1": {
+      id: "sku-1",
+      price: { final: 50000 },
+      in_stock: true,
+    },
+  };
+
+  // Shape A: multi-variant with object variants & object matrix
+  const shapeA = {
+    id: "prod-a",
+    sku: baseSku,
+    variants: { color: { name: "Warna", options: { c1: "Hitam" } } },
+    matrix: { c1: "sku-1" },
+  };
+  assert.ok(JakmallRawSpdtSchema.safeParse(shapeA).success, "Shape A (object variants, object matrix) must pass");
+
+  // Shape B: single-SKU with empty array variants & null matrix
+  const shapeB = {
+    id: "prod-b",
+    sku: baseSku,
+    variants: [],
+    matrix: null,
+  };
+  assert.ok(JakmallRawSpdtSchema.safeParse(shapeB).success, "Shape B (array variants, null matrix) must pass");
+
+  // Shape C: variants omitted / undefined, matrix null
+  const shapeC = {
+    id: "prod-c",
+    sku: baseSku,
+    matrix: null,
+  };
+  assert.ok(JakmallRawSpdtSchema.safeParse(shapeC).success, "Shape C (undefined variants, null matrix) must pass");
+
+  // Shape D: array of variant dimension objects
+  const shapeD = {
+    id: "prod-d",
+    sku: baseSku,
+    variants: [{ key: "Warna", val: { name: "Warna" } }],
+    matrix: { "hash-1": "sku-1" },
+  };
+  assert.ok(JakmallRawSpdtSchema.safeParse(shapeD).success, "Shape D (array of dim objects) must pass");
+
+  // Fail-closed: invalid primitive variants must be REJECTED
+  assert.equal(
+    JakmallRawSpdtSchema.safeParse({ id: "p", sku: baseSku, variants: "invalid-string" }).success,
+    false,
+    "String variants must fail schema validation"
+  );
+  assert.equal(
+    JakmallRawSpdtSchema.safeParse({ id: "p", sku: baseSku, variants: 12345 }).success,
+    false,
+    "Numeric variants must fail schema validation"
+  );
+  assert.equal(
+    JakmallRawSpdtSchema.safeParse({ id: "p", sku: baseSku, variants: true }).success,
+    false,
+    "Boolean variants must fail schema validation"
+  );
+
+  // Fail-closed: invalid primitive matrix must be REJECTED
+  assert.equal(
+    JakmallRawSpdtSchema.safeParse({ id: "p", sku: baseSku, matrix: "invalid-string" }).success,
+    false,
+    "String matrix must fail schema validation"
+  );
+  assert.equal(
+    JakmallRawSpdtSchema.safeParse({ id: "p", sku: baseSku, matrix: 12345 }).success,
+    false,
+    "Numeric matrix must fail schema validation"
+  );
+  assert.equal(
+    JakmallRawSpdtSchema.safeParse({ id: "p", sku: baseSku, matrix: true }).success,
+    false,
+    "Boolean matrix must fail schema validation"
+  );
+});
+
+test("resolveVariantAttributes safe null matrix and array variants semantics", () => {
+  // variants=[], matrix=null -> returns empty Map
+  const map1 = resolveVariantAttributes([], null);
+  assert.equal(map1.size, 0, "Empty array variants and null matrix must yield empty attributes map");
+
+  // variants=undefined, matrix=null -> returns empty Map
+  const map2 = resolveVariantAttributes(undefined, null);
+  assert.equal(map2.size, 0, "Undefined variants and null matrix must yield empty attributes map");
+
+  // variants=[], matrix=undefined -> returns empty Map
+  const map3 = resolveVariantAttributes([], undefined);
+  assert.equal(map3.size, 0, "Empty array variants and undefined matrix must yield empty attributes map");
+});
+
+test("Fail-closed invariants preserved for single-SKU products with variants=[] and matrix=null", () => {
+  const makeParsed = (priceFinal: unknown, inStock: boolean | null | undefined, limitedStock: unknown = null): ParsedJakmallPage => ({
+    title: "Test Single SKU",
+    description: "Description",
+    brand: "TestBrand",
+    categoryPath: ["Category"],
+    specifications: {},
+    spdt: {
+      id: "test-single-1",
+      variants: [],
+      matrix: null,
+      sku: {
+        "sku-single": {
+          id: "sku-single",
+          sku: "TEST-SKU",
+          in_stock: inStock,
+          is_limited_stock: limitedStock !== null,
+          limited_stock: limitedStock as number | null,
+          price: {
+            final: priceFinal as number | null,
+          },
+        },
+      },
+    },
+  });
+
+  // Missing price -> throws MISSING_PRICE
+  assert.throws(
+    () => normalizeToCanonical(makeParsed(null, true), "https://www.jakmall.com/test/prod"),
+    (err: unknown) => err instanceof JakmallNormalizerError && err.code === "MISSING_PRICE"
+  );
+
+  // Zero price -> throws INVALID_PRICE
+  assert.throws(
+    () => normalizeToCanonical(makeParsed(0, true), "https://www.jakmall.com/test/prod"),
+    (err: unknown) => err instanceof JakmallNormalizerError && err.code === "INVALID_PRICE"
+  );
+
+  // Negative price -> throws INVALID_PRICE
+  assert.throws(
+    () => normalizeToCanonical(makeParsed(-15000, true), "https://www.jakmall.com/test/prod"),
+    (err: unknown) => err instanceof JakmallNormalizerError && err.code === "INVALID_PRICE"
+  );
+
+  // Confirmed out of stock -> quantity 0, available false, exact true
+  const oosCanonical = normalizeToCanonical(makeParsed(25000, false), "https://www.jakmall.com/test/prod");
+  assert.equal(oosCanonical.variants[0]?.inventory.available, false);
+  assert.equal(oosCanonical.variants[0]?.inventory.quantity, 0);
+  assert.equal(oosCanonical.variants[0]?.inventory.exact, true);
+
+  // Undisclosed quantity in stock -> available true, quantity undefined, exact false
+  const inStockCanonical = normalizeToCanonical(makeParsed(25000, true, null), "https://www.jakmall.com/test/prod");
+  assert.equal(inStockCanonical.variants[0]?.inventory.available, true);
+  assert.equal(inStockCanonical.variants[0]?.inventory.quantity, undefined);
+  assert.equal(inStockCanonical.variants[0]?.inventory.exact, false);
 });
