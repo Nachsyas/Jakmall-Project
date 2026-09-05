@@ -502,7 +502,7 @@ test("15. GET /api/jobs returns recent activity without sensitive metadata", asy
 });
 
 // ----------------------------------------------------------------------
-// 16. CORS PREFLIGHT
+// 16. CORS PREFLIGHT & ORIGIN CONTROLS
 // ----------------------------------------------------------------------
 test("16. OPTIONS request from allowed origin returns 204 with CORS headers", async () => {
   const res = await fetch(`${baseUrl}/api/products`, {
@@ -516,4 +516,49 @@ test("16. OPTIONS request from allowed origin returns 204 with CORS headers", as
   assert.equal(res.status, 204);
   assert.equal(res.headers.get("Access-Control-Allow-Origin"), "http://localhost:3000");
   assert.equal(res.headers.get("Access-Control-Allow-Methods")?.includes("GET"), true);
+});
+
+test("17. Request from disallowed origin does not receive Access-Control-Allow-Origin", async () => {
+  const res = await fetch(`${baseUrl}/api/products`, {
+    method: "GET",
+    headers: {
+      Origin: "https://malicious-site.example.com",
+    },
+  });
+
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Access-Control-Allow-Origin"), null);
+});
+
+test("18. Custom corsOptions supports production HTTPS origin and rejects wildcard", async () => {
+  const customServer = createApiServer({
+    corsOptions: {
+      allowedOrigins: ["https://my-app.onrender.com", "*"],
+    },
+  });
+
+  await new Promise<void>((resolve) => {
+    customServer.listen(0, "127.0.0.1", () => resolve());
+  });
+
+  try {
+    const customAddr = customServer.address() as AddressInfo;
+    const customUrl = `http://127.0.0.1:${customAddr.port}`;
+
+    // 18a: configured production HTTPS origin is allowed
+    const resAllowed = await fetch(`${customUrl}/api/health`, {
+      headers: { Origin: "https://my-app.onrender.com" },
+    });
+    assert.equal(resAllowed.headers.get("Access-Control-Allow-Origin"), "https://my-app.onrender.com");
+
+    // 18b: wildcard is never allowed as an origin
+    const resWildcard = await fetch(`${customUrl}/api/health`, {
+      headers: { Origin: "https://random-attacker.com" },
+    });
+    assert.equal(resWildcard.headers.get("Access-Control-Allow-Origin"), null);
+  } finally {
+    await new Promise<void>((resolve) => {
+      customServer.close(() => resolve());
+    });
+  }
 });

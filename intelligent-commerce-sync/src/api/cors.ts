@@ -23,7 +23,7 @@ export function handleCors(
 ): boolean {
   const origin = req.headers["origin"];
   const allowedOrigins = options.allowedOrigins
-    ? new Set(options.allowedOrigins)
+    ? new Set(options.allowedOrigins.filter((o) => o !== "*"))
     : DEFAULT_ALLOWED_ORIGINS;
 
   if (typeof origin === "string" && allowedOrigins.has(origin)) {

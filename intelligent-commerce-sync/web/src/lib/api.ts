@@ -3,7 +3,8 @@
  * Consumes Phase 6B HTTP API endpoints on port 3001
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+const rawApiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+const API_BASE = rawApiBase.replace(/\/+$/, "");
 
 export interface HealthResponse {
   status: "ok" | "degraded" | "error";

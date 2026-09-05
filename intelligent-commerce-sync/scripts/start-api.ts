@@ -4,7 +4,22 @@ import { disconnectPrismaClient } from "../src/persistence/prisma.js";
 const PORT = parseInt(process.env["PORT"] ?? "3001", 10);
 const HOST = process.env["HOST"] ?? "localhost";
 
-const server = createApiServer();
+function parseAllowedOrigins(raw?: string): string[] | undefined {
+  if (!raw || !raw.trim()) {
+    return undefined;
+  }
+  const origins = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && s !== "*");
+  return origins.length > 0 ? origins : undefined;
+}
+
+const allowedOrigins = parseAllowedOrigins(process.env["CORS_ALLOWED_ORIGINS"]);
+
+const server = createApiServer({
+  corsOptions: allowedOrigins ? { allowedOrigins } : undefined,
+});
 
 server.listen(PORT, HOST, () => {
   console.log("==================================================");
