@@ -1,393 +1,474 @@
-# Intelligent Product Sync Platform
-### JakMall → Shopee Intelligent Synchronization Engine
+# Intelligent Commerce Sync
 
-Technical Project Test: JakMall Product Scraper & Shopee Listing Automation.
-Engineered as a modular TypeScript engine with strict stock/price semantics, deterministic marketplace policies, durable PostgreSQL/Redis execution infrastructure, and an optional bounded semantic intelligence sidecar.
+### JakMall Product Scraper & Shopee Listing Preparation
 
----
+A working Proof of Concept that discovers products from a configured public JakMall catalog, imports and normalizes product data, stores the catalog locally, and prepares products for Shopee using deterministic pricing, inventory, category mapping, and human-review safety gates.
 
-## 1. Project Purpose
-
-This platform implements a fail-closed synchronization workflow from **JakMall** toward **Shopee Indonesia**. Local preparation, persistence, execution safety, and verification behavior are tested; remote Shopee publication remains constrained by the State B boundary described below:
-
-```
-JakMall Product URL
-  │
-  ▼ [Static HTTP Fetch + SSRF Allowlist Gate]
-Raw HTML / SPDT Extraction (Balanced-brace JSON parser + JSON-LD fallback, zero eval)
-  │
-  ▼ [Normalization & Invariant Enforcement]
-Canonical Product Model (Source/Merchant/Display SKUs, Strict Stock & Price Semantics)
-  │
-  ▼ [Marketplace Adaptation & Policy Engine]
-Shopee Listing Draft (Deterministic Markup/Rounding, Inventory Gate, Category/Attribute Mapping)
-  │
-  ▼ [Human-in-the-Loop Review Gate]
-Review Assessment (APPROVE / REJECT / EDIT_REQUIRED, Blocker Protection)
-  │
-  ▼ [Persistence & Change Detection]
-PostgreSQL Snapshots & Sync Planner (Field Diffing, Risk Evaluation, Idempotent Job Planning)
-  │
-  ▼ [Durable Execution Queue]
-Redis / BullMQ Worker (Durable Payloads, Exponential Backoff, Idempotency Record)
-  │
-  ▼ [Marketplace Boundary & State B Guard]
-Marketplace Execution Boundary (Dry-run Simulation / Credential-Gated Remote Boundary)
-  │
-  ▼ [Post-Execution Safety]
-Read-After-Write Verification Model (Title, Variant Count, Price, and Stock Verification)
-```
+> **Note**: No individual product URL is required for the normal demo flow.
 
 ---
 
-## 2. Current Certified Status
+## Demo Snapshot
 
-Certified Phase 5 implementation baseline: `778041c74e85a30e0abcd058ee8a4cfe75cde0e5`
+| Metric / Endpoint | Certified Result |
+|---|---:|
+| **Products Discovered** | 20 |
+| **Products Imported** | 20 |
+| **Failed Imports** | 0 |
+| **Automated Tests** | 643 / 643 PASS |
+| **Web UI** | [http://localhost:3000](http://localhost:3000) |
+| **API Health** | [http://localhost:3001/api/health](http://localhost:3001/api/health) |
 
-| Phase | Description | Status |
-|---|---|:---:|
-| **Phase 2** | Source Engine & Canonical Model (JakMall Parser, Strict Semantics) | **CERTIFIED** |
-| **Phase 3** | Marketplace Abstraction & Shopee Draft Engine (State B E2E) | **CERTIFIED** |
-| **Phase 4A** | Persistence Foundation (PostgreSQL 16 Schema, Prisma, Repositories) | **CERTIFIED** |
-| **Phase 4B** | Synchronization Domain (Diff Engine, Planner, State Machine) | **CERTIFIED** |
-| **Phase 4C** | Execution Infrastructure (BullMQ Queue, Worker, Scheduler, Runtime Hardening) | **CERTIFIED** |
-| **Phase 5A** | Semantic Intelligence Safety Foundation (Deterministic Contracts, Strict Output) | **CERTIFIED** |
-| **Phase 5B** | Catalog Intelligence (Deterministic Matching, Verified Store Memory, AI Suggestion) | **CERTIFIED** |
-| **Phase 5C** | Review Intelligence (Anomaly Detection, Non-escalating Advisory Annotations) | **CERTIFIED** |
-| **Phase 5D** | Parser Recovery Assistance (Deterministic Diagnostics, Recovery Advice) | **CERTIFIED** |
-| **Phase 5E** | Live AI Provider Safety Gate (Responses API, Rate Limits, Circuit Breaker, Privacy Gate) | **CERTIFIED** |
-| **Final Gate** | Documentation & Submission Alignment | **IN PROGRESS** |
-
-> [!IMPORTANT]
-> **State B Operating Boundary (Platform-Access-Limited E2E):**
-> Live remote publication to Shopee was **NOT performed** because legitimate official Shopee Open Platform partner credentials (`SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY`, `SHOPEE_SHOP_ID`, `SHOPEE_ACCESS_TOKEN`) and an independently verified remote wire protocol were not available in this test environment.
-> The platform implements and locally tests: local listing draft preparation, deterministic pricing/inventory policies, locally validated simulated marketplace payloads under the current internal adapter contract, authorized boundary rejection (`BLOCKED_BY_CREDENTIALS`), persistence, queuing, runtime scheduling, and the read-after-write verification model. Remote Shopee wire protocol compatibility remains unverified. Live Shopee write success is never fabricated.
+[Quick Start](#quick-start) · [Demo Flow](#demo-flow) · [Reviewer Demo](#5-minute-reviewer-demo) · [Architecture](#architecture) · [API](#api) · [Known Limitations](#known-limitations)
 
 ---
 
-## 3. What Works (Implemented & Tested)
+## Screenshots
 
-- **JakMall Source Extraction (`src/jakmall/`)**: Static HTTP client with strict domain allowlisting (`jakmall.com`, `www.jakmall.com`), SSRF blocking, custom balanced-brace parser for `var spdt = {...}` (zero `eval`), and schema.org JSON-LD fallback.
-- **Canonical Product Model (`src/canonical/`)**: Disambiguates `sourceSkuId`, `merchantSku`, and `displaySku`. Enforces recursive variant matrix extraction across arbitrary dimensions.
-- **Strict Stock Semantics**: Differentiates confirmed out-of-stock (0), exact limited stock, undisclosed available stock (quantity undefined, not fabricated), and inconsistent/missing stock (`available: null`, fails closed).
-- **Strict Price Semantics**: Missing, null, or non-positive source prices fail closed and never default to Rp0.
-- **Shopee Marketplace Draft (`src/marketplace/shopee/builder.ts`, `policy.ts`, `mapper.ts`)**: Transforms canonical products into Shopee drafts with ceiling rounding to IDR increments, fee buffers, and minimum margins.
-- **Review Decision Gate (`src/marketplace/shopee/builder.ts` via `applyHumanReview()`)**: Explicit human review workflows (`APPROVE`, `REJECT`, `EDIT_REQUIRED`) preventing any unapproved or blocked draft from publication.
-- **Marketplace Execution Boundary (`src/marketplace/shopee/adapter.ts`, `src/execution/marketplace/`)**: Locally validated dry-run payload generation under the current internal adapter contract and authorized execution gate returning `BLOCKED_BY_CREDENTIALS` when credentials are absent.
-- **Read-After-Write Verifier (`src/marketplace/shopee/verifier.ts`, `src/execution/marketplace/verification.ts`)**: Compares expected listing state with listing-reader results for price, stock, title, and variant-count mismatches; current certified evidence uses simulated mock readers rather than live Shopee reads.
-- **Relational Persistence (`src/persistence/`)**: PostgreSQL 16 schema via Prisma storing products, point-in-time canonical product snapshots with hashes, listing mappings, sync jobs, idempotency records, sync events, and audit logs.
-- **Sync Planner & State Machine (`src/sync/`)**: Deterministic change detection (diff kinds: price, inventory, content, variants), snapshot-scoped idempotency keys, and explicit job state machine transitions.
-- **Queue & Worker Runtime (`src/queue/`, `src/runtime/`)**: Redis 7 + BullMQ job queues, isolated worker execution, exponential backoff, concurrency collision recovery, scheduler, and stale processing recovery.
-- **Semantic Intelligence Sidecar (`src/intelligence/`)**:
-  - *Phase 5A*: Type-safe prompt contracts, strict candidate/evidence allowlists, deterministic request IDs.
-  - *Phase 5B*: Deterministic category/attribute matching with local verified store memory fallback before AI suggestion.
-  - *Phase 5C*: Multi-signal anomaly review producing inert display annotations without mutating deterministic truth.
-  - *Phase 5D*: Parser recovery diagnostics prioritizing non-semantic network/HTTP errors before consulting AI.
-  - *Phase 5E*: Native fetch OpenAI Responses adapter (`gpt-5.6-luna`), strict privacy gate, sliding-window rate limiter (default 60 req / 60s), three-state circuit breaker, process request budget (default 1,000 calls), decoupled usage accounting, and `DISABLED` default mode.
+Real screenshots from the final Phase 6 web application.
+
+| Overview | Product Catalog |
+|---|---|
+| <img src="docs/screenshots/home.png" alt="Intelligent Commerce Sync overview" width="100%"> | <img src="docs/screenshots/products.png" alt="Imported JakMall product catalog" width="100%"> |
+
+| Catalog Sync | Shopee Preparation |
+|---|---|
+| <img src="docs/screenshots/sync.png" alt="JakMall catalog discovery and sync" width="100%"> | <img src="docs/screenshots/product-detail.png" alt="Product detail and Shopee listing preparation" width="100%"> |
+
+- **Overview** — application summary and current catalog state.
+- **Product Catalog** — normalized products imported from the configured public JakMall catalog.
+- **Catalog Sync** — bounded automatic catalog discovery/import workflow.
+- **Shopee Preparation** — deterministic listing preparation with pricing, inventory, category, and review safeguards.
 
 ---
 
-## 4. What Does NOT Work / Is Not Claimed
+## What This Project Solves
 
-To preserve strict technical-test integrity, the following limitations are explicitly documented:
-1. **No Live Shopee Publication Evidence**: Live network writes to Shopee Open Platform APIs were not conducted; credentials were not available.
-2. **No Live Shopee Read-After-Write Verification Evidence**: The verification engine is tested against simulated mock readers, not live remote Shopee GET calls.
-3. **Unverified Shopee Wire Protocol Details**: Specific Shopee API field schemas reflect best-effort public documentation and have not been validated against live endpoints.
-4. **No Credential or 2FA/CAPTCHA Bypass**: The scraper does not attempt session hijacking, CAPTCHA bypass, or headless browser automation against anti-bot defenses.
-5. **No Stock Fabrication**: Undisclosed JakMall inventory is never converted into an arbitrary numeric quantity.
-6. **No Autonomous AI Authority**: AI components act strictly as an advisory sidecar; they cannot override prices, invent stock, auto-approve review blocks, or mutate database state directly.
-7. **No Web Dashboard**: The application is an automated backend engine driven by CLI diagnostic scripts, scheduled workers, and library-level TypeScript modules. No UI dashboard is implemented.
-8. **No Live Production Deployment**: All verification was executed in local containerized and test environments; no production cloud cluster deployment is claimed.
+Transferring product catalogs manually from JakMall into Shopee is error-prone and labor-intensive:
+- Copying titles, descriptions, and media across browser tabs.
+- Flattening multi-dimensional variant combinations (color, size) while preserving unique SKUs.
+- Recalculating commercial margins (+20% markup with IDR 1.000 ceiling rounding).
+- Handling inventory truth: preventing undisclosed stock from being fabricated as numeric quantities.
+- Mapping third-party categories and attributes into Shopee-compliant taxonomies.
+
+This PoC turns that manual workload into a controlled automated and semi-automated pipeline with built-in operator review gates.
 
 ---
 
-## 5. Architecture
+## Demo Flow
 
-### Current Implemented Architecture
-
-```
-                       ┌──────────────────────────────┐
-                       │  JakMall Source (HTTP GET)   │
-                       └──────────────┬───────────────┘
-                                      │
-                                      ▼
-                       ┌──────────────────────────────┐
-                       │   Source Client & Parser     │
-                       │ (Balanced-brace / JSON-LD)   │
-                       └──────────────┬───────────────┘
-                                      │
-                                      ▼
-                       ┌──────────────────────────────┐
-                       │    Canonical Product Model   │
-                       │  (Strict Stock/Price Rules)  │
-                       └──────────────┬───────────────┘
-                                      │
-                                      ▼
-                       ┌──────────────────────────────┐
-                       │ Marketplace Policy & Review  │◄──────┐
-                       │ (src/marketplace/shopee/)    │       │ (Advisory)
-                       └──────────────┬───────────────┘       │
-                                      │                       │
-                                      ▼                       │
-                       ┌──────────────────────────────┐       │
-                       │ PostgreSQL 16 (Prisma ORM)   │       │
-                       │ Snapshots, Jobs, Idempotency │       │
-                       └──────────────┬───────────────┘       │
-                                      │                       │
-                                      ▼                       │
-                       ┌──────────────────────────────┐       │
-                       │   Sync Planner & State Mach. │       │
-                       │  (Diffing & Operation Keys)  │       │
-                       └──────────────┬───────────────┘       │
-                                      │                       │
-                                      ▼                       │
-                       ┌──────────────────────────────┐       │
-                       │  Redis 7 / BullMQ Queue      │       │
-                       │   (Background Workers)       │       │
-                       └──────────────┬───────────────┘       │
-                                      │                       │
-                                      ▼                       │
-                       ┌──────────────────────────────┐       │
-                       │ Marketplace Execution Guard  │       │
-                       │ (src/marketplace/shopee/     │       │
-                       │  adapter.ts,                 │       │
-                       │  src/execution/marketplace/) │       │
-                       └──────────────┬───────────────┘       │
-                                      │                       │
-                                      ▼                       │
-                       ┌──────────────────────────────┐       │
-                       │ Read-After-Write Verifier    │       │
-                       │ (src/marketplace/shopee/     │       │
-                       │  verifier.ts,                │       │
-                       │  src/execution/marketplace/  │       │
-                       │  verification.ts)            │       │
-                       └──────────────────────────────┘       │
-                                                              │
-   ┌──────────────────────────────────────────────────────────┴─────┐
-   │                Semantic Intelligence Sidecar (Optional)        │
-   │  Catalog Memory (5B) │ Review Anomaly (5C) │ Parser Recovery (5D)│
-   │  ───────────────────────────────────────────────────────────── │
-   │   SemanticIntelligenceService (5A)                             │
-   │   └── LiveAiProvider (5E: Privacy Gate, Rate/Circuit Controls) │
-   └────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[JakMall Public Catalog] --> B[Automatic Product Discovery]
+    B --> C[Controlled Batch Import]
+    C --> D[JakMall Parser / Source-Shape Validation]
+    D --> E[CanonicalProduct]
+    E --> F[PostgreSQL]
+    F --> G[Thin HTTP API]
+    G --> H[React Web Application]
+    H --> I[Product Detail]
+    I --> J[Prepare for Shopee]
+    J --> K[Pricing + Inventory + Category Mapping]
+    K --> L[Human Review if Required]
+    L --> M[Dry Run / Credential-Gated Boundary]
 ```
 
-### Possible Future Architecture (Not Implemented)
-- Web Dashboard for human review queue and job inspection.
-- Multi-marketplace adapter expansion (Tokopedia, Lazada, TikTok Shop).
-- Cloud deployment with managed database and cache instances.
+Normal demo usage does **not** require individual product URLs. Products are discovered automatically from the configured public catalog/store, subject to safety limits and available public catalog pages.
 
 ---
 
-## 6. Quickstart
+## What Works
 
-### Prerequisites
-- **Node.js**: `v20+`
-- **Docker & Docker Compose**: For local PostgreSQL and Redis
+| Capability | Status | Notes |
+| :--- | :---: | :--- |
+| **Automatic Catalog Discovery** | ✅ Implemented | Discovers product links from public store pages with crawl limits. |
+| **Batch Catalog Import** | ✅ Implemented | Sequential parsing, failure isolation, and transactional DB persistence. |
+| **Product Extraction** | ✅ Implemented | Static HTTP client + Cheerio DOM parsing + custom balanced-brace parser (zero `eval`). |
+| **Canonical Normalization** | ✅ Implemented | Normalizes to `CanonicalProduct` with source, merchant, and display SKUs. |
+| **Images / Variants / SKU** | ✅ Implemented | Full gallery extraction and multi-dimensional variant matrix resolution. |
+| **Strict Stock Semantics** | ✅ Implemented | Exact stock preserved; confirmed out-of-stock = 0; undisclosed stock = `undefined` (never 0). |
+| **Pricing Policy** | ✅ Implemented | Non-positive prices fail closed; deterministic +20% margin with IDR 1.000 rounding. |
+| **Shopee Draft Preparation** | ✅ Implemented | Evaluates listing properties, pricing rules, and category mapping. |
+| **Human Review Gate** | ✅ Implemented | Unverified categories/attributes transition to `NEEDS_REVIEW` with `canPublish: false`. |
+| **PostgreSQL Persistence** | ✅ Implemented | Prisma ORM storing products, point-in-time snapshots, sync events, and audit logs. |
+| **Redis / BullMQ Runtime** | ✅ Implemented | Durable asynchronous queue with idempotency keys and retry handling. |
+| **React Web UI** | ✅ Implemented | Responsive Apple-inspired interface across desktop, tablet, and mobile. |
+| **Status / Error Handling** | ✅ Implemented | Sanitized API errors (no stack trace leaks); SSRF domain allowlisting (`jakmall.com`). |
+| **Live Shopee Publication** | ⚠️ Not claimed | Authenticated remote API write is not performed due to unavailable partner credentials. |
 
-### Step 1: Install Dependencies
+*Certified live run result: **20 discovered / 20 imported / 0 failed**.*
+
+### Cross-Store Compatibility
+
+The source adapter was live-validated across multiple public JakMall stores and source shapes:
+
+| Public Catalog | Discovered | Imported | Failed |
+|---|---:|---:|---:|
+| ACMIC Official Store | 20 | 20 | 0 |
+| Freedom Store | 30 | 30 | 0 |
+| LStore | 10 | 10 | 0 |
+
+The Freedom Store validation exposed a legitimate single-SKU source shape where:
+- `variants = []`
+- `matrix = null`
+
+The parser now explicitly supports both:
+- Object-based multi-variant product structures
+- Observed single-SKU no-matrix structures
+
+while unsupported malformed primitive shapes still fail closed.
+
+> **Note**: This pipeline is live-validated across three public JakMall catalogs and supports observed legitimate source shapes. It does not claim universal compatibility with every arbitrary future page format on JakMall.
+
+---
+
+## Quick Start
+
+### 1. Clone & Checkout
+```bash
+git clone https://github.com/Nachsyas/Jakmall-Project.git
+cd Jakmall-Project
+git checkout phase6/web-catalog-ui
+cd intelligent-commerce-sync
+```
+
+### 2. Install Dependencies
 ```bash
 npm install
+npm --prefix web install
 ```
 
-### Step 2: Configure Environment
-Copy the environment template:
+### 3. Configure Environment
 ```bash
 cp .env.example .env
 ```
-
 > [!NOTE]
-> - The local `DATABASE_URL` in `.env.example` targets the local Docker PostgreSQL container (`postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public`).
-> - Leave Shopee API credentials blank unless legitimately authorized partner keys are available.
-> - `OPENAI_API_KEY` may remain blank; `AI_PROVIDER_MODE` defaults to `DISABLED`.
-> - Do **not** commit `.env` to version control.
+> - Default `DATABASE_URL` and `REDIS_URL` in `.env.example` point to the local Docker services.
+> - Shopee credentials remain blank for the local dry-run demo.
+> - `OPENAI_API_KEY` is optional; `AI_PROVIDER_MODE` defaults to `DISABLED`.
+> - Never commit `.env` to version control.
 
-### Step 3: Start Local Infrastructure
-Start PostgreSQL 16 and Redis 7 containers:
+### 4. Start Infrastructure Containers
 ```bash
 docker compose up -d
-```
-Verify containers are healthy:
-```bash
 docker compose ps
 ```
 
-### Step 4: Apply Database Migrations
-Deploy Prisma schema to local PostgreSQL:
+### 5. Initialize Database
 ```bash
+npx prisma generate
 npx prisma migrate deploy
 ```
 
-### Step 5: Run Baseline Verification
+### 6. Run Application
+Open two terminal windows:
+
+**Terminal A (Backend API):**
 ```bash
-# Type check with zero errors
+npm run dev:api
+```
+
+**Terminal B (Frontend Web UI):**
+```bash
+npm run dev:web
+```
+
+Access:
+- **Web UI**: [http://localhost:3000](http://localhost:3000)
+- **API Health**: [http://localhost:3001/api/health](http://localhost:3001/api/health)
+
+---
+
+## 5-Minute Reviewer Demo
+
+1. **Open the Web UI**: Visit `http://localhost:3000` to see the live catalog overview and metrics.
+2. **Open Products**: Navigate to `/products`. Browse persisted items or search using `"PowerBank"`.
+3. **Open Sync JakMall**: Navigate to `/sync` (pre-filled with `https://www.jakmall.com/acmic-official-store`).
+4. **Preview Discovery**: Click **Preview Discovery** to inspect extracted product URLs and page depth.
+5. **Batch Import**: Click **Import Discovered Products** once. Watch the single-flight concurrency lock and live progress (*Certified run: 20 discovered, 20 imported, 0 failed*).
+6. **Inspect Product Detail**: Return to `/products` and select `PreorderACMIC C8 8000mAh PowerBank`.
+7. **Verify Stock & Variants**: Review the variants table. Confirm stock semantics: both variants indicate `"Out of stock"` (`quantity: 0`) rather than fabricated numbers.
+8. **Prepare for Shopee**: Click **Prepare for Shopee**.
+   - Selling price: `Rp 348.000` (+20% margin from `Rp 289.900`).
+   - Category suggestion: `Aksesoris Handphone > Charger & Kabel > Kepala Charger`.
+   - Review state: `NEEDS_REVIEW (rule)` — flagged because numeric Shopee ID requires operator lookup.
+   - Publishable: `False (Gated)` — strictly prevents unverified publication.
+9. **Review & Activity**: Visit `/reviews` and `/activity` to view the operator queue and job execution logs.
+10. **Shopee Credential Boundary**: Note that the marketplace dry-run protects the boundary when live credentials are absent.
+
+*(Public JakMall page content may change over time; the 20-product count reflects the certified benchmark run).*
+
+---
+
+## Web Application
+
+Built with **React 19, TypeScript, and Vite**, styled using vanilla CSS following Apple Human Interface Guidelines:
+
+| Route | Purpose |
+| :--- | :--- |
+| `/` | System overview, live inventory metrics, and recent catalog highlights. |
+| `/products` | Persisted product catalog with real-time text search and IDR pricing. |
+| `/products/:id` | Full product detail, multi-dimensional variants table, and Shopee preparation. |
+| `/sync` | Interactive catalog discovery preview and single-click batch import. |
+| `/reviews` | Operator review queue for items requiring manual mapping or approval. |
+| `/activity` | Background synchronization job execution history and audit log. |
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    UI[React Web UI]
+    API[Thin Node HTTP API]
+    CATALOG[Catalog / Product / Shopee Services]
+    DISCOVERY[Catalog Discovery]
+    SOURCE[JakMall Source Adapter]
+    PARSER[Parser + Normalizer]
+    CANONICAL[CanonicalProduct]
+    DB[(PostgreSQL)]
+    POLICY[Shopee Policy Engine]
+    REVIEW[Review Gate]
+    REDIS[(Redis / BullMQ)]
+    AI[Optional Advisory AI Sidecar]
+
+    UI --> API
+    API --> CATALOG
+    CATALOG --> DISCOVERY
+    DISCOVERY --> SOURCE
+    SOURCE --> PARSER
+    PARSER --> CANONICAL
+    CANONICAL --> DB
+    CANONICAL --> POLICY
+    POLICY --> REVIEW
+    DB --> REDIS
+    AI -. advisory only .-> CATALOG
+```
+
+> [!NOTE]
+> **Advisory Sidecar Isolation**: Runtime AI is strictly optional and advisory. It **cannot** override authoritative prices, mutate inventory truth, bypass human review gates, or directly write to the database.
+
+---
+
+## Data Extracted
+
+- **Identity**: Product title, brand, full description, and canonical URL.
+- **Pricing**: Source selling price and original price (fails closed on non-positive values).
+- **Media**: Primary cover image and secondary gallery images.
+- **Variants & SKUs**: Multi-option combinations (color, size), variant names, and display SKUs.
+- **Inventory Semantics**: Exact quantity when specified, out-of-stock indicators, and undisclosed stock.
+- **Specifications & Taxonomy**: Technical attributes, warranty info, and source breadcrumb category.
+- **Dimensions**: Weight and package dimensions where available in source data.
+
+*Not all JakMall fields map 1:1 to Shopee. Unverified fields transition to `NEEDS_REVIEW` rather than being fabricated.*
+
+---
+
+## API
+
+The local HTTP API runs on port `3001` with strict Zod request validation:
+
+| Method | Endpoint | Purpose | Validation Bounds |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/health` | Health check & connectivity status | None |
+| `GET` | `/api/products` | Paginated product catalog | `limit <= 100`, `offset >= 0` |
+| `GET` | `/api/products/:id` | Detailed product record with variants | Valid UUID |
+| `POST` | `/api/catalog/discover` | Discovers product URLs from store | `maxProducts <= 100`, `maxPages <= 10` |
+| `POST` | `/api/catalog/import` | Ingests and persists store products | `maxProducts <= 50`, `maxPages <= 5` |
+| `POST` | `/api/products/:id/prepare-shopee` | Evaluates Shopee preparation rules | Dry-run gated |
+| `GET` | `/api/reviews` | Operator review queue | None |
+| `GET` | `/api/jobs` | Background sync job history | None |
+
+<details>
+<summary><strong>Catalog Import Request Example</strong></summary>
+
+```http
+POST /api/catalog/import HTTP/1.1
+Host: localhost:3001
+Content-Type: application/json
+
+{
+  "url": "https://www.jakmall.com/acmic-official-store",
+  "maxProducts": 20,
+  "maxPages": 2,
+  "persist": true
+}
+```
+</details>
+
+---
+
+## Shopee Preparation & Safety Boundary
+
+| Implemented & Verified Locally | Not Claimed / Boundary Guarded |
+| :--- | :--- |
+| ✔ Normalized Shopee listing draft generation | ✖ Successful live Shopee listing creation |
+| ✔ Deterministic pricing (+20% margin, commercial rounding) | ✖ Verified production Shopee API network write |
+| ✔ Strict inventory mapping (0 preserved, undisclosed gated) | ✖ Live remote read-after-write verification |
+| ✔ Category mapping & attribute suggestion engine | ✖ Automatic unverified numeric category publishing |
+| ✔ Blocker and warning evaluation (weight, brand, review) | ✖ Credential or 2FA/CAPTCHA bypass |
+| ✔ Dry-run execution boundary with credential guard | ✖ Remote marketplace success without credentials |
+
+> [!IMPORTANT]
+> **Category Review Rule**: If a numeric Shopee category ID cannot be verified, the product enters `NEEDS_REVIEW` instead of receiving a fabricated category ID. Live Shopee publication was not executed because authorized official Open Platform credentials were unavailable for this assessment environment.
+
+---
+
+## Reliability & Security
+
+- **SSRF Defense**: Strict allowlisting (`jakmall.com`, `www.jakmall.com`) blocking private IPs, loopback, and metadata endpoints.
+- **Zero Eval Execution**: Static HTTP client + Cheerio DOM parsing + custom balanced-brace object extraction (zero `eval`).
+- **Fail-Closed Pricing**: Missing or non-positive prices immediately throw normalization errors (no Rp0 listings).
+- **Strict Stock Semantics**: Undisclosed stock remains `undefined`; confirmed out-of-stock is preserved as `0`.
+- **Bounded Ingestion**: Enforced limits on request bodies, crawl depth, and pagination scans.
+- **Idempotency**: Deterministic hash-based operation keys prevent duplicate listing creations or updates.
+- **Queue Fault Tolerance**: Redis 7 and BullMQ provide exponential backoff retry and stale-job recovery.
+- **Information Protection**: API errors suppress stack traces; local development CORS allowlist enforced; `.env` excluded from version control.
+
+---
+
+## Testing
+
+Final certified regression status: **643 / 643 PASS, 0 FAIL**
+
+| Test Suite | Command / Scope | Tests |
+| :--- | :--- | :---: |
+| **Root / API / UI** | `npm test` (`tests/*.test.ts`) | 264 |
+| **Intelligence Subdirectories** | `npm run test:intelligence` (`tests/intelligence/**/*.test.ts`) | 224 |
+| **Standalone Semantic Intelligence** | `npx tsx --test tests/intelligence/semantic-intelligence.test.ts` | 82 |
+| **PostgreSQL Integration** | `npm run test:integration:db` | 14 |
+| **Queue Integration** | `npm run test:integration:queue` | 21 |
+| **Marketplace Integration** | `npm run test:integration:marketplace` | 18 |
+| **Runtime Integration** | `npm run test:integration:runtime` | 20 |
+| **Total Unique Tests** | | **643** |
+
+```bash
+# Verify backend types
 npm run typecheck
 
-# Run 211 core unit & regression tests
+# Verify frontend types and production build (runs tsc -b && vite build)
+npm run build:web
+
+# Run core flat test suite
 npm test
 ```
 
----
+<details>
+<summary><strong>Full Integration & Intelligence Test Commands</strong></summary>
 
-## 7. Demo / Reviewer Walkthrough (5-Minute Path)
-
-The repository provides standalone diagnostic scripts in `scripts/` using authentic sanitized-real golden fixtures from `tests/fixtures/`:
-
-### 1. JakMall Extraction & Semantic Parsing
 ```bash
-# ACMIC Golden Fixture: 9 SKUs, variant pricing, limited stock
-npx tsx scripts/test-jakmall.ts tests/fixtures/acmic.html
-
-# MOMO Golden Fixture: Multi-dimension (XL + Hitam), merchant SKU OMPKGKBK, 800g
-npx tsx scripts/test-jakmall.ts tests/fixtures/momo.html
-
-# ASV Golden Fixture: 6 combinations (Size x Color), null SKU tolerance, 1700g
-npx tsx scripts/test-jakmall.ts tests/fixtures/asv.html
-```
-
-### 2. Shopee Listing Preparation & Policy Dry-Run
-```bash
-# Prepare draft, calculate deterministic markup/rounding, apply inventory policy
-npx tsx scripts/test-shopee-draft.ts tests/fixtures/acmic.html
-npx tsx scripts/test-shopee-draft.ts tests/fixtures/momo.html
-npx tsx scripts/test-shopee-draft.ts tests/fixtures/asv.html
-```
-
-### What Each Fixture Demonstrates
-- **`acmic.html` (`ACMIC CPD65`)**: Demonstrates multi-SKU pricing resolution (Rp379k, Rp449k, Rp299k, Rp399k), confirmed out-of-stock handling across 8 SKUs, and exact limited stock (3) for SKU `5502951494118`.
-- **`momo.html` (`MOMO Cargo`)**: Demonstrates multi-dimensional matrix resolution (`Ukuran: XL`, `Warna: Hitam`), merchant SKU mapping, and weight extraction.
-- **`asv.html` (`ASV Raincoat`)**: Demonstrates $2 \times 3$ matrix combinations, resilience to null source SKUs and null preorder fields, and heavy item weight handling (1,700g).
-
----
-
-## 8. Test Suites & Verification Commands
-
-Latest certified local regression evidence: **588 / 588 PASS, 0 FAIL**
-
-### Core Unit & Domain Tests
-```bash
-# Run 211 core tests (parser, canonical, pricing, inventory, sync planning, state machine)
-npm test
-```
-
-### Phase 5 Semantic Intelligence Tests
-```bash
-# Phase 5A: Semantic Intelligence Safety Foundation (82 tests)
+# Semantic intelligence suites
 npx tsx --test tests/intelligence/semantic-intelligence.test.ts
-
-# Phase 5B: Catalog Intelligence & Verified Mapping Store (47 tests)
-npm run test:intelligence:catalog
-
-# Phase 5C: Review Intelligence & Anomaly Annotation (75 tests)
-npm run test:intelligence:review
-
-# Phase 5D: Parser Recovery Assistance (46 tests)
-npm run test:intelligence:parser
-
-# Phase 5E: Live AI Provider Safety Gate (56 tests)
-npm run test:intelligence:live-provider
-
-# Run all Phase 5 subdirectories combined (224 tests across 5B + 5C + 5D + 5E)
 npm run test:intelligence
+
+# Docker integration suites
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public" npm run test:integration:db
+REDIS_URL="redis://localhost:6379" DATABASE_URL="postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public" npm run test:integration:queue
+REDIS_URL="redis://localhost:6379" DATABASE_URL="postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public" npm run test:integration:marketplace
+REDIS_URL="redis://localhost:6379" DATABASE_URL="postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public" npm run test:integration:runtime
 ```
-
-### Integration Test Suites (Requires Docker Infrastructure)
-Ensure `docker compose up -d` is running, then execute:
-```bash
-# PostgreSQL Persistence & Idempotency Integration (12 tests)
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public" \
-REDIS_URL="redis://localhost:6379" \
-npm run test:integration:db
-
-# Redis / BullMQ Queue & Worker Integration (21 tests)
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public" \
-REDIS_URL="redis://localhost:6379" \
-npm run test:integration:queue
-
-# Marketplace Execution Boundary Integration (18 tests)
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public" \
-REDIS_URL="redis://localhost:6379" \
-npm run test:integration:marketplace
-
-# Runtime Hardening, Scheduler & Stale Recovery Integration (20 tests)
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/commerce_sync?schema=public" \
-REDIS_URL="redis://localhost:6379" \
-npm run test:integration:runtime
-```
-
-### Test Count Summary
-$$\begin{aligned}
-\text{Core Unit Tests (npm test)} &: 211 \\
-\text{Phase 5A Semantic Foundation} &: 82 \\
-\text{Phase 5B Catalog Intelligence} &: 47 \\
-\text{Phase 5C Review Intelligence} &: 75 \\
-\text{Phase 5D Parser Recovery} &: 46 \\
-\text{Phase 5E Live AI Provider} &: 56 \\
-\text{Phase 4 Integration: Database} &: 12 \\
-\text{Phase 4 Integration: Queue} &: 21 \\
-\text{Phase 4 Integration: Marketplace} &: 18 \\
-\text{Phase 4 Integration: Runtime} &: 20 \\
-\hline
-\mathbf{Total\ Unique\ Automated\ Tests} &: \mathbf{588}\ \text{(588 PASS, 0 FAIL)}
-\end{aligned}$$
-
-*Note on Subdirectory Intelligence Runner:* `npm run test:intelligence` executes test files in subdirectories ($47 + 75 + 46 + 56 = 224$ tests across 13 suites) and excludes top-level `tests/intelligence/semantic-intelligence.test.ts` (82 tests), which is run directly.
+</details>
 
 ---
 
-## 9. Technology Stack & Dependencies
+## Dependencies
 
-- **Runtime & Language**: Node.js `v20+`, TypeScript `v5+` with strict compiler settings
-- **HTML Parsing**: `cheerio` (fast server-side DOM traversing)
-- **Validation**: `zod` (runtime validation at source/canonical and selected semantic boundaries)
-- **Persistence**: `prisma` ORM with PostgreSQL 16
-- **Asynchronous Queuing**: `bullmq` and `ioredis` with Redis 7
-- **AI Integration**: Native `fetch` against OpenAI Responses API (`gpt-5.6-luna`), strictly gated and `DISABLED` by default (zero vendor SDK dependencies)
+Only dependencies directly present in `package.json` and `web/package.json`:
 
----
-
-## 10. Cost & Simplicity Analysis
-
-- **Zero Heavy Orchestration**: Designed as a clean modular monolith with in-process modular calls; testable without distributed-service coordination, Kubernetes, Kafka, or microservice mesh overhead.
-- **Local Open-Source Infrastructure**: PostgreSQL and Redis run locally via standard Alpine Docker containers with zero external SaaS requirements for development.
-- **Controlled Scraping Cost**: Primary extraction relies on static HTTP requests without mandatory paid proxy networks or headless browser overhead.
-- **Controlled AI Cost Profiles**:
-  - `AI_PROVIDER_MODE=DISABLED` (default): Zero provider network dispatch and zero provider API cost.
-  - `DRY_RUN` mode: Performs request envelope, privacy gate, and character budget validation locally; zero provider network dispatch, consumes zero process budget slots, consumes zero live rate slots, and incurs zero OpenAI cost.
-  - `LIVE` mode: Requires a legitimate API key; bounded by request text budget (default 16,000 chars; bounds: 500..50,000), process request budget (default 1,000 calls; bounds: 1..100,000), sliding-window rate limiter (default 60 req / 60s; bounds: 1..1,000 req / 1,000..600,000 ms), three-state circuit breaker, and usage telemetry.
-- **Realistic Production Boundary**: Total production cost is not claimed to be $0. Production deployment would require appropriate application, PostgreSQL, and Redis hosting. Managed cloud services such as RDS or ElastiCache are optional deployment choices, not architectural requirements. Valid marketplace developer credentials would also be required for remote marketplace operations.
+- **Backend Core**: Node.js, TypeScript, `cheerio` (DOM parsing), `zod` (validation)
+- **Data & Queue**: `@prisma/client`, `prisma`, PostgreSQL 16, `bullmq`, `ioredis`, Redis 7
+- **Frontend**: `react` 19, `react-dom`, `react-router-dom`, `vite`
+- **Optional Runtime**: OpenAI Responses API integration (disabled by default)
 
 ---
 
-## 11. Security, Reliability & Fail-Closed Safety
+## Operating Cost
 
-- **SSRF Defense**: Strict allowlist validation (`jakmall.com`, `www.jakmall.com`), blocking localhost, loopback, private IPv4/IPv6 ranges, and AWS metadata IP (`169.254.169.254`).
-- **Zero Eval Execution**: Custom character-by-character balanced-brace parser extracts embedded JavaScript objects without invoking `eval()` or `Function()`.
-- **Zero Token Invention**: Undisclosed inventory remains explicit `quantity: undefined`, preventing phantom stock listing.
-- **Zero Rp0 Pricing**: Missing or non-positive source prices throw errors at the canonical boundary, preventing disastrous zero-price listings.
-- **Idempotency Safeguards**: Product-level keys for listing creation, snapshot-scoped keys for price/inventory updates, and database unique constraints preventing duplicate dispatch.
-- **AI Safety Controls**: Process request ceilings (default 1,000 calls), sliding-window rate limiters (default 60 req / 60s), three-state circuit breakers (`CLOSED`, `OPEN`, `HALF_OPEN`), and structural privacy gates:
-  - Forbidden secret-bearing property names and unknown fields are rejected before network dispatch.
-  - Candidate and evidence provenance is enforced.
-  - API keys are never exposed through public config or usage snapshots.
-  - Raw provider error payloads and status values are not echoed by the adapter.
-  - *(Comprehensive PII detection is not claimed).*
-- **Persistence Safety**: Persistence models and repositories support tested `SyncEvent` and `AuditLog` history.
+> **No paid third-party service is required for the certified local demo.**
 
----
+| Component | Local Demo | Production Considerations |
+| :--- | :--- | :--- |
+| **Node.js / TypeScript** | Free / OSS | Standard container hosting |
+| **React / Vite** | Free / OSS | Static CDN hosting |
+| **PostgreSQL** | Local Docker | Managed DB (e.g., AWS RDS) |
+| **Redis** | Local Docker | Managed cache (e.g., AWS ElastiCache) |
+| **JakMall Access** | Public page access | Egress bandwidth & rate limiting |
+| **Shopee Preparation** | Local dry-run | Official API partnership |
+| **Runtime AI** | Disabled / Optional | Token usage cost if enabled |
 
-## 12. AI-Assisted Development Disclosure
-
-- **Development Tooling**: Architecture, implementation, and test suites were developed with the pair-programming assistance of Google Antigravity, strictly governed by rigorous phased verification gates.
-- **Runtime System Independence**: All deterministic business logic (parsing, pricing, inventory safety, idempotency, state transitions) operates strictly independently of AI. Runtime AI features exist exclusively as an optional, bounded, advisory sidecar.
+*(Normal local workstation hardware, electricity, and network connections are excluded).*
 
 ---
 
-## 13. Documentation Cross-References
+## Known Limitations
 
-- [Project Status](docs/project-status.md)
-- [Project Checklist & Certification History](PROJECT_CHECKLIST.md)
-- [Known Limitations & Mitigations](docs/known-limitations.md)
+1. **No Live Shopee API Publishing**: Executed in local dry-run simulation mode due to lack of authorized partner credentials.
+2. **Unverified Shopee Wire Compatibility**: Schemas follow public developer documentation; live remote wire protocol is unverified.
+3. **Numeric Category ID Lookup**: Semantic category suggestions are generated, but numeric Shopee IDs require operator confirmation.
+4. **Read-Only Review Queue**: The web UI visualizes flagged items; mutation endpoints for approving/rejecting are not exposed in the UI.
+5. **Activity Record Dependency**: The activity page displays persisted `SyncJob` records and is truthfully empty before background jobs are queued.
+6. **External Image Hosting**: Image URLs reference source JakMall CDN endpoints rather than independent cloud storage.
+7. **Bounded Catalog Discovery**: Operates on configured store URLs with crawl limits; it does **not** crawl the entire JakMall marketplace.
+8. **Scraper Maintenance Sensitivity**: Changes to upstream JakMall HTML layouts or JSON variable structures may require parser maintenance.
+9. **No Production Cloud Deployment**: Validated in containerized local environments; no cloud deployment is claimed.
+
+---
+
+## Future Improvements
+
+- **Official Shopee API**: Authenticate live Open Platform partner credentials.
+- **Taxonomy Synchronization**: Ingest Shopee's official category tree into PostgreSQL for automatic numeric category resolution.
+- **Remote Image Re-hosting**: Upload product images to Amazon S3 / Cloudflare R2 before marketplace creation.
+- **Interactive Review UI**: Provide web-based approve, edit, and reject buttons for `NEEDS_REVIEW` items.
+- **Background Synchronization**: Introduce scheduled incremental crawlers to detect supplier price/stock updates automatically.
+- **Enterprise Observability**: Add OpenTelemetry distributed tracing and Prometheus metrics.
+
+---
+
+## AI Disclosure
+
+### Development AI Assistance
+Google Antigravity / AI coding assistants were used during development for:
+- Boilerplate scaffolding and refactoring.
+- Debugging and test case generation.
+- Code reviews and documentation drafting.
+
+*The candidate directed the architecture, established domain invariants, validated stock/pricing semantics, conducted code reviews, and verified all test results.*
+
+### Runtime AI Sidecar
+The repository contains an optional, bounded **Semantic Intelligence Sidecar**:
+- Disabled by default (`AI_PROVIDER_MODE=DISABLED`).
+- Functions strictly as an advisory sidecar (category hints, structural diagnostics).
+- Cannot invent stock, modify authoritative prices, auto-approve review blockers, or mutate database state.
+
+---
+
+## Video Demo
+
+- **Walkthrough**: `<ADD VIDEO LINK BEFORE SUBMISSION>`
+- **Suggested Coverage**:
+  1. JakMall catalog discovery on `https://www.jakmall.com/acmic-official-store`.
+  2. Batch catalog import into PostgreSQL.
+  3. Browsing products in the React Web UI.
+  4. Inspecting product variants, SKU, and out-of-stock semantics.
+  5. Generating Shopee listing draft with +20% markup.
+  6. Reviewing `NEEDS_REVIEW` category gating and credential-protected safety boundary.
+
+---
+
+## Submission Details
+
+- **GitHub Repository**: [https://github.com/Nachsyas/Jakmall-Project](https://github.com/Nachsyas/Jakmall-Project)
+- **Submission Branch**: `phase6/web-catalog-ui`
+- **Application Implementation Baseline**: `da72ae1adcec6e13a3352b972dfeae2267c163e8`
+
+---
+
+## Additional Documentation
+
+- [Project Status & Implementation Log](docs/project-status.md)
+- [Project Checklist & Verification Records](PROJECT_CHECKLIST.md)
 - [System Architecture Overview](docs/architecture/system-overview.md)
+- [Known Limitations & Risk Mitigations](docs/known-limitations.md)
 - [Shopee Integration Specification & State B Boundary](docs/marketplace/shopee-integration.md)
 - [Phase 5E AI Integration Safety Gate](docs/architecture/phase5-ai-integration-safety-gate.md)
