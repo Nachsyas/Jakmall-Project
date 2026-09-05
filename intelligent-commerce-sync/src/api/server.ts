@@ -14,6 +14,7 @@ import {
   ProductListQuerySchema,
 } from "./validation.js";
 import { getPrismaClient } from "../persistence/prisma.js";
+import { checkRedisHealth as defaultCheckRedisHealth } from "../queue/health.js";
 import type { ApiErrorResponse } from "./types.js";
 
 export interface ApiServerDeps {
@@ -23,6 +24,7 @@ export interface ApiServerDeps {
   reviewQueryService?: ReviewQueryService | undefined;
   jobQueryService?: JobQueryService | undefined;
   corsOptions?: CorsOptions | undefined;
+  checkRedisHealth?: ((redisUrl?: string) => Promise<boolean>) | undefined;
 }
 
 export function sendJson(res: ServerResponse, statusCode: number, data: unknown): void {
@@ -154,6 +156,7 @@ export function createApiRequestListener(deps: ApiServerDeps = {}) {
   const reviewQueryService = deps.reviewQueryService ?? new ReviewQueryService();
   const jobQueryService = deps.jobQueryService ?? new JobQueryService();
   const corsOptions = deps.corsOptions ?? {};
+  const checkRedis = deps.checkRedisHealth ?? defaultCheckRedisHealth;
 
   return async function requestListener(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // 1. CORS Preflight & Headers
@@ -185,9 +188,16 @@ export function createApiRequestListener(deps: ApiServerDeps = {}) {
           }
         }
 
-        const redisStatus: "connected" | "disconnected" | "unconfigured" = process.env["REDIS_URL"]
-          ? "connected"
-          : "unconfigured";
+        let redisStatus: "connected" | "disconnected" | "unconfigured" = "unconfigured";
+        const redisUrl = process.env["REDIS_URL"];
+        if (redisUrl && redisUrl.trim().length > 0) {
+          try {
+            const isHealthy = await checkRedis(redisUrl.trim());
+            redisStatus = isHealthy ? "connected" : "disconnected";
+          } catch {
+            redisStatus = "disconnected";
+          }
+        }
 
         sendJson(res, 200, {
           status: "ok",
