@@ -24,7 +24,8 @@ export class CatalogPersistenceService {
   async persistCanonicalProduct(canonical: CanonicalProduct): Promise<PersistedCatalogProduct> {
     const hashes = computeSnapshotHashes(canonical);
 
-    return await this.prisma.$transaction(async (tx) => {
+    return await this.prisma.$transaction(
+      async (tx) => {
       // 1. Locate or create Product & ProductSource
       let productSource = await tx.productSource.findUnique({
         where: {
@@ -134,6 +135,10 @@ export class CatalogPersistenceService {
         productSourceId: productSource.id,
         sourceSnapshotId: snapshot.id,
       };
+    },
+    {
+      maxWait: 5000,
+      timeout: 10000,
     });
   }
 }
