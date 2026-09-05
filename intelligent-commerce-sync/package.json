@@ -14,7 +14,10 @@
     "test:intelligence:review": "tsx --test tests/intelligence/review/**/*.test.ts",
     "test:intelligence:parser": "tsx --test tests/intelligence/parser-recovery/**/*.test.ts",
     "test:intelligence:live-provider": "tsx --test tests/intelligence/live-provider/**/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:api": "tsx scripts/start-api.ts",
+    "dev:web": "npm --prefix web run dev",
+    "build:web": "npm --prefix web run build"
   },
   "keywords": [],
   "author": "",

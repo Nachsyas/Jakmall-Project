@@ -1,0 +1,360 @@
+/* ==========================================================================
+   Intelligent Commerce Sync — Apple-Inspired Design System Tokens
+   ========================================================================== */
+
+:root {
+  /* Color Palette */
+  --color-action-blue: #0066cc;
+  --color-focus-blue: #0071e3;
+  --color-blue-on-dark: #2997ff;
+  --color-ink: #1d1d1f;
+  --color-white: #ffffff;
+  --color-parchment: #f5f5f7;
+  --color-pearl: #fafafc;
+  --color-dark-tile: #272729;
+  --color-black: #000000;
+  --color-hairline: #e0e0e0;
+  --color-muted: #7a7a7a;
+
+  /* Semantic State Accents */
+  --color-success-text: #1d7c39;
+  --color-warning-text: #b25e02;
+  --color-danger-text: #d70015;
+
+  /* Typography */
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, system-ui, sans-serif;
+  --font-size-hero: 56px;
+  --font-size-headline: 40px;
+  --font-size-title: 28px;
+  --font-size-subhead: 21px;
+  --font-size-body: 17px;
+  --font-size-caption: 13px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 40px;
+  --spacing-2xl: 64px;
+  --spacing-3xl: 96px;
+
+  /* Layout */
+  --nav-height: 44px;
+  --subnav-height: 52px;
+  --container-max-width: 1200px;
+  --container-wide-width: 1440px;
+
+  /* Radii */
+  --radius-card: 18px;
+  --radius-pill: 980px;
+  --radius-input: 12px;
+
+  /* Allowed Shadow: Product Imagery ONLY */
+  --product-shadow: rgba(0, 0, 0, 0.22) 3px 5px 30px;
+}
+
+/* Base Reset & Typography */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-system);
+  font-size: 17px;
+  line-height: 1.47059;
+  font-weight: 400;
+  color: var(--color-ink);
+  background-color: var(--color-white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  color: var(--color-ink);
+  background-color: var(--color-white);
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* Links */
+a {
+  color: var(--color-action-blue);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+a:hover {
+  color: var(--color-focus-blue);
+  text-decoration: underline;
+}
+
+/* Focus Visible Accessibility */
+:focus-visible {
+  outline: 2px solid var(--color-focus-blue);
+  outline-offset: 2px;
+}
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.15;
+  color: var(--color-ink);
+  letter-spacing: -0.015em;
+}
+
+/* Section Containers & Visual Rhythm */
+.section-full {
+  width: 100%;
+  padding: var(--spacing-3xl) var(--spacing-lg);
+}
+
+.section-full.section-light {
+  background-color: var(--color-white);
+  color: var(--color-ink);
+}
+
+.section-full.section-pearl {
+  background-color: var(--color-pearl);
+  color: var(--color-ink);
+}
+
+.section-full.section-parchment {
+  background-color: var(--color-parchment);
+  color: var(--color-ink);
+}
+
+.section-full.section-dark {
+  background-color: var(--color-dark-tile);
+  color: var(--color-white);
+}
+
+.section-full.section-dark h1,
+.section-full.section-dark h2,
+.section-full.section-dark h3,
+.section-full.section-dark p {
+  color: var(--color-white);
+}
+
+.section-full.section-dark a {
+  color: var(--color-blue-on-dark);
+}
+
+.section-full.section-dark a:hover {
+  color: var(--color-white);
+}
+
+.container {
+  width: 100%;
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+}
+
+/* Buttons — Pill Geometry, NO Shadows, Action Blue */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  min-height: 44px;
+  padding: 10px 22px;
+  font-family: var(--font-system);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.2;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  box-shadow: none !important;
+}
+
+.btn:hover {
+  text-decoration: none;
+}
+
+.btn-primary {
+  background-color: var(--color-action-blue);
+  color: var(--color-white);
+  border-color: var(--color-action-blue);
+}
+
+.btn-primary:hover {
+  background-color: var(--color-focus-blue);
+  border-color: var(--color-focus-blue);
+  color: var(--color-white);
+}
+
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--color-action-blue);
+  border-color: var(--color-action-blue);
+}
+
+.btn-secondary:hover {
+  background-color: rgba(0, 102, 204, 0.05);
+  color: var(--color-focus-blue);
+  border-color: var(--color-focus-blue);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-subtle {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--color-ink);
+  border-color: transparent;
+}
+
+.btn-subtle:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+.btn-dark-primary {
+  background-color: var(--color-blue-on-dark);
+  color: var(--color-black);
+  border-color: var(--color-blue-on-dark);
+  font-weight: 600;
+}
+
+.btn-dark-primary:hover {
+  background-color: var(--color-white);
+  border-color: var(--color-white);
+  color: var(--color-black);
+}
+
+/* Store Utility Cards — 18px radius, 1px hairline border, NO Card Shadow */
+.card-utility {
+  background-color: var(--color-white);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-lg);
+  box-shadow: none !important;
+  display: flex;
+  flex-direction: column;
+  transition: border-color 0.15s ease;
+}
+
+.card-utility:hover {
+  border-color: #b0b0b5;
+}
+
+/* Product Imagery with Allowed Subtle Shadow */
+.product-image-frame {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: var(--color-pearl);
+  border-radius: calc(var(--radius-card) - 6px);
+  padding: var(--spacing-md);
+}
+
+.product-image-frame img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: var(--product-shadow);
+  border-radius: 6px;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-utility:hover .product-image-frame img {
+  transform: scale(1.03);
+}
+
+/* Product Image Fallback */
+.product-image-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted);
+  font-size: 13px;
+  background-color: var(--color-parchment);
+  border-radius: 6px;
+  text-align: center;
+  padding: var(--spacing-sm);
+}
+
+/* Semantic Status Badges (Restrained, No Rainbow Dashboard Styling) */
+.status-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.status-indicator.ready {
+  color: var(--color-success-text);
+}
+
+.status-indicator.needs-review {
+  color: var(--color-warning-text);
+}
+
+.status-indicator.blocked {
+  color: var(--color-danger-text);
+}
+
+.status-indicator.pending {
+  color: var(--color-muted);
+}
+
+/* Responsive Breakpoints */
+@media (max-width: 1068px) {
+  :root {
+    --font-size-hero: 44px;
+    --font-size-headline: 34px;
+  }
+  .section-full {
+    padding: var(--spacing-2xl) var(--spacing-md);
+  }
+}
+
+@media (max-width: 834px) {
+  :root {
+    --font-size-hero: 38px;
+    --font-size-headline: 30px;
+    --font-size-body: 16px;
+  }
+  .section-full {
+    padding: var(--spacing-xl) var(--spacing-md);
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --font-size-hero: 32px;
+    --font-size-headline: 26px;
+  }
+}
+
+@media (max-width: 420px) {
+  :root {
+    --font-size-hero: 28px;
+    --font-size-headline: 24px;
+  }
+}
