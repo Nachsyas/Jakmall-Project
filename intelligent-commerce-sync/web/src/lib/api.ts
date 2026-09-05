@@ -1,10 +1,27 @@
 /**
  * Typed API Client for Intelligent Commerce Sync
- * Consumes Phase 6B HTTP API endpoints on port 3001
+ * Supports local development (port 3001) and same-origin production deployment
  */
 
-const rawApiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
-const API_BASE = rawApiBase.replace(/\/+$/, "");
+export function resolveApiBase(
+  explicitBase?: string | undefined,
+  isProd: boolean = false
+): string {
+  const raw =
+    explicitBase !== undefined && explicitBase !== ""
+      ? explicitBase
+      : isProd
+        ? ""
+        : "http://localhost:3001";
+  return raw.replace(/\/+$/, "");
+}
+
+const metaEnv = (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string; PROD?: boolean } }).env;
+
+const API_BASE = resolveApiBase(
+  metaEnv?.VITE_API_BASE_URL,
+  Boolean(metaEnv?.PROD)
+);
 
 export interface HealthResponse {
   status: "ok" | "degraded" | "error";

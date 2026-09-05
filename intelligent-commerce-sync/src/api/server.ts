@@ -61,6 +61,41 @@ export async function readJsonBody(
     );
   }
 
+  // Support serverless runtimes (such as Vercel) where req.body is pre-parsed or pre-buffered
+  const preParsed = (req as unknown as { body?: unknown }).body;
+  if (preParsed !== undefined) {
+    if (typeof preParsed === "string") {
+      if (Buffer.byteLength(preParsed, "utf-8") > maxBytes) {
+        throw new ApiError(413, "PAYLOAD_TOO_LARGE", "Request payload exceeds 1MB limit");
+      }
+      if (!preParsed.trim()) return {};
+      try {
+        return JSON.parse(preParsed);
+      } catch {
+        throw new ApiError(400, "BAD_REQUEST", "Malformed JSON request body");
+      }
+    }
+    if (Buffer.isBuffer(preParsed)) {
+      if (preParsed.length > maxBytes) {
+        throw new ApiError(413, "PAYLOAD_TOO_LARGE", "Request payload exceeds 1MB limit");
+      }
+      const str = preParsed.toString("utf-8");
+      if (!str.trim()) return {};
+      try {
+        return JSON.parse(str);
+      } catch {
+        throw new ApiError(400, "BAD_REQUEST", "Malformed JSON request body");
+      }
+    }
+    if (typeof preParsed === "object" && preParsed !== null) {
+      const serialized = JSON.stringify(preParsed);
+      if (Buffer.byteLength(serialized, "utf-8") > maxBytes) {
+        throw new ApiError(413, "PAYLOAD_TOO_LARGE", "Request payload exceeds 1MB limit");
+      }
+      return preParsed;
+    }
+  }
+
   return new Promise((resolve, reject) => {
     let raw = "";
     let byteLength = 0;

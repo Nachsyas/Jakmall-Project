@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "build": "npx prisma generate && npm run build:web",
     "test": "tsx --test tests/*.test.ts",
     "test:integration:db": "tsx --test tests/integration/**/*.db.test.ts",
     "test:integration:queue": "tsx --test tests/integration/**/*.redis.test.ts",
